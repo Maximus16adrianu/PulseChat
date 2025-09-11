@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseChat - Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .auth-section {
+            background-color: #2d2d2d;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .auth-form {
+            display: inline-flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .auth-form input {
+            padding: 12px 15px;
+            background-color: #1a1a1a;
+            border: 2px solid #555;
+            color: white;
+            border-radius: 5px;
+            width: 250px;
+        }
+
+        .auth-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #5a67d8;
+        }
+
+        .btn-danger {
+            background-color: #e53e3e;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c53030;
+        }
+
+        .btn-success {
+            background-color: #38a169;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #2f855a;
+        }
+
+        .btn-warning {
+            background-color: #d69e2e;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background-color: #b7791f;
+        }
+
+        .btn-info {
+            background-color: #3182ce;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background-color: #2c5aa0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: #2d2d2d;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #444;
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #bbb;
+            font-size: 1.1em;
+        }
+
+        .users-section {
+            background-color: #2d2d2d;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #667eea;
+            border-bottom: 2px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .controls-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            padding: 10px 15px;
+            background-color: #1a1a1a;
+            border: 2px solid #555;
+            color: white;
+            border-radius: 5px;
+            width: 300px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .users-table th,
+        .users-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+
+        .users-table th {
+            background-color: #1a1a1a;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .users-table tr:hover {
+            background-color: #383838;
+        }
+
+        .role-badge, .tier-badge, .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .role-user {
+            background-color: #4a5568;
+            color: white;
+        }
+
+        .role-developer {
+            background-color: #ecc94b;
+            color: #1a1a1a;
+        }
+
+        .role-admin {
+            background-color: #e53e3e;
+            color: white;
+        }
+
+        .role-owner {
+            background-color: #38a169;
+            color: white;
+        }
+
+        .tier-1 {
+            background-color: #718096;
+            color: white;
+        }
+
+        .tier-2 {
+            background-color: #3182ce;
+            color: white;
+        }
+
+        .tier-3 {
+            background-color: #9f7aea;
+            color: white;
+        }
+
+        .status-banned {
+            background-color: #e53e3e;
+            color: white;
+        }
+
+        .status-active {
+            background-color: #38a169;
+            color: white;
+        }
+
+        .status-muted {
+            background-color: #d69e2e;
+            color: white;
+        }
+
+        .role-select, .tier-select {
+            padding: 6px 8px;
+            background-color: #1a1a1a;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            margin-right: 5px;
+            font-size: 12px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .error-message {
+            color: #e53e3e;
+            background-color: #2d1b1b;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #e53e3e;
+        }
+
+        .success-message {
+            color: #38a169;
+            background-color: #1b2d1b;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #38a169;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: #bbb;
+            padding: 40px;
+        }
+
+        .refresh-btn {
+            float: right;
+            margin-bottom: 20px;
+        }
+
+        .tier-info {
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .tier-info h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .tier-description {
+            font-size: 0.9em;
+            color: #bbb;
+        }
+
+        .tier-list {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .tier-item {
+            background-color: #2d2d2d;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+
+        .username-cell {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #36393f;
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        .ban-reason {
+            font-size: 0.9em;
+            color: #ff6b6b;
+            font-style: italic;
+        }
+
+        .mute-info {
+            font-size: 0.9em;
+            color: #d69e2e;
+            font-style: italic;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+        }
+
+        .modal-content {
+            background-color: #2d2d2d;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+            color: white;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #444;
+        }
+
+        .modal-header h3 {
+            color: #667eea;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px 15px;
+            background-color: #1a1a1a;
+            border: 2px solid #555;
+            color: white;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .modal-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #fff;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .auth-form {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .auth-form input {
+                width: 100%;
+            }
+
+            .users-table {
+                font-size: 0.9em;
+            }
+
+            .users-table th,
+            .users-table td {
+                padding: 8px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .controls-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 PulseChat Admin Panel</h1>
+            <p>Manage users, roles, tiers, and monitor system statistics</p>
+        </div>
+
+        <div class="auth-section">
+            <div id="authForm">
+                <h3 style="margin-bottom: 20px;">Enter Admin API Key</h3>
+                <div class="auth-form">
+                    <input type="password" id="apiKey" placeholder="Enter your API key" />
+                    <button class="btn btn-primary" onclick="authenticate()">Connect</button>
+                </div>
+            </div>
+            <div id="authSuccess" class="hidden">
+                <h3 style="color: #38a169;">✅ Authenticated Successfully</h3>
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-info" onclick="downloadBackup()">📦 Download Backup</button>
+                    <button class="btn btn-danger" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="adminContent" class="hidden">
+            <!-- Tier Information -->
+            <div class="tier-info">
+                <h3>📊 User Tier System</h3>
+                <div class="tier-list">
+                    <div class="tier-item">
+                        <strong>Tier 1:</strong> Messages only
+                    </div>
+                    <div class="tier-item">
+                        <strong>Tier 2:</strong> Messages + Pictures
+                    </div>
+                    <div class="tier-item">
+                        <strong>Tier 3:</strong> Messages + Pictures + Videos (10MB)
+                    </div>
+                </div>
+                <p class="tier-description">
+                    <strong>Note:</strong> Developer, Admin, and Owner roles automatically have Tier 3 permissions regardless of assigned tier.
+                </p>
+            </div>
+
+            <!-- Statistics Section -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="activeUsersCount">-</div>
+                    <div class="stat-label">Active Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="queuedUsersCount">-</div>
+                    <div class="stat-label">Queued Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="mutedUsersCount">-</div>
+                    <div class="stat-label">Muted Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalUsersCount">-</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+            </div>
+
+            <!-- Users Management Section -->
+            <div class="users-section">
+                <div class="section-title">
+                    User Management
+                    <button class="btn btn-primary refresh-btn" onclick="loadData()">🔄 Refresh</button>
+                </div>
+                
+                <div class="controls-bar">
+                    <input type="text" class="search-box" id="userSearch" placeholder="Search users by username..." onkeyup="filterUsers()">
+                    <span style="color: #bbb; font-size: 0.9em;">Total: <span id="filteredCount">0</span> users shown</span>
+                </div>
+                
+                <div id="loadingUsers" class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading users...
+                </div>
+
+                <div id="usersContent" class="hidden">
+                    <table class="users-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Tier</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="messageContainer"></div>
+    </div>
+
+    <!-- Ban Modal -->
+    <div id="banModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeBanModal()">&times;</span>
+                <h3>Ban User</h3>
+            </div>
+            <p>Are you sure you want to ban user "<span id="banUsername"></span>"?</p>
+            <textarea id="banReason" class="modal-input" placeholder="Enter ban reason (optional)..." rows="3"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" onclick="confirmBan()">Ban User</button>
+                <button class="btn" style="background-color: #666; color: white;" onclick="closeBanModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mute Modal -->
+    <div id="muteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeMuteModal()">&times;</span>
+                <h3>Mute User</h3>
+            </div>
+            <p>How long would you like to mute user "<span id="muteUsername"></span>"?</p>
+            <select id="muteDuration" class="modal-input">
+                <option value="1h">1 Hour</option>
+                <option value="1d">1 Day</option>
+                <option value="1w">1 Week</option>
+            </select>
+            <textarea id="muteReason" class="modal-input" placeholder="Enter mute reason (optional)..." rows="2"></textarea>
+            <div class="modal-buttons">
+                <button class="btn btn-warning" onclick="confirmMute()">Mute User</button>
+                <button class="btn" style="background-color: #666; color: white;" onclick="closeMuteModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apiKey = '';
+        let users = [];
+        let currentBanUserId = null;
+        let currentMuteUserId = null;
+
+        // Authentication
+        function authenticate() {
+            const key = document.getElementById('apiKey').value.trim();
+            if (!key) {
+                showMessage('Please enter an API key', 'error');
+                return;
+            }
+
+            apiKey = key;
+            
+            // Test the API key by fetching stats
+            fetch('/api/admin/stats', {
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (res.status === 401) {
+                    throw new Error('Invalid API key');
+                }
+                return res.json();
+            })
+            .then(data => {
+                // Authentication successful
+                document.getElementById('authForm').classList.add('hidden');
+                document.getElementById('authSuccess').classList.remove('hidden');
+                document.getElementById('adminContent').classList.remove('hidden');
+                showMessage('Successfully authenticated!', 'success');
+                loadData();
+            })
+            .catch(err => {
+                showMessage(err.message || 'Authentication failed', 'error');
+                apiKey = '';
+            });
+        }
+
+        function logout() {
+            apiKey = '';
+            document.getElementById('authForm').classList.remove('hidden');
+            document.getElementById('authSuccess').classList.add('hidden');
+            document.getElementById('adminContent').classList.add('hidden');
+            document.getElementById('apiKey').value = '';
+            showMessage('Logged out successfully', 'success');
+        }
+
+        // Data loading
+        function loadData() {
+            if (!apiKey) return;
+
+            loadStats();
+            loadUsers();
+        }
+
+        function loadStats() {
+            fetch('/api/admin/stats', {
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('activeUsersCount').textContent = data.activeUsers;
+                document.getElementById('queuedUsersCount').textContent = data.queuedUsers;
+                document.getElementById('mutedUsersCount').textContent = data.mutedUsers;
+                document.getElementById('totalUsersCount').textContent = users.length;
+            })
+            .catch(err => {
+                showMessage('Failed to load statistics', 'error');
+            });
+        }
+
+        function loadUsers() {
+            document.getElementById('loadingUsers').classList.remove('hidden');
+            document.getElementById('usersContent').classList.add('hidden');
+
+            fetch('/api/admin/users', {
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                users = data;
+                renderUsersTable();
+                document.getElementById('loadingUsers').classList.add('hidden');
+                document.getElementById('usersContent').classList.remove('hidden');
+                
+                // Update total users count
+                document.getElementById('totalUsersCount').textContent = users.length;
+                updateFilteredCount();
+            })
+            .catch(err => {
+                showMessage('Failed to load users', 'error');
+                document.getElementById('loadingUsers').classList.add('hidden');
+            });
+        }
+
+        function renderUsersTable() {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                const createdDate = new Date(user.created).toLocaleDateString();
+                const userTier = user.tier || 1;
+                
+                // Determine status
+                let statusInfo = '';
+                if (user.banned) {
+                    statusInfo = `<span class="status-badge status-banned">Banned</span>`;
+                    if (user.banReason) {
+                        statusInfo += `<br><span class="ban-reason">${escapeHtml(user.banReason)}</span>`;
+                    }
+                } else if (user.muted && user.muteEnd > Date.now()) {
+                    statusInfo = `<span class="status-badge status-muted">Muted</span>`;
+                    if (user.muteReason) {
+                        statusInfo += `<br><span class="mute-info">${escapeHtml(user.muteReason)}</span>`;
+                    }
+                    const muteEnd = new Date(user.muteEnd);
+                    statusInfo += `<br><span class="mute-info">Until: ${muteEnd.toLocaleString()}</span>`;
+                } else {
+                    statusInfo = `<span class="status-badge status-active">Active</span>`;
+                }
+                
+                row.innerHTML = `
+                    <td class="username-cell">${escapeHtml(user.username)}</td>
+                    <td>
+                        <span class="role-badge role-${user.role}">${user.role.toUpperCase()}</span>
+                    </td>
+                    <td>
+                        <span class="tier-badge tier-${userTier}">Tier ${userTier}</span>
+                    </td>
+                    <td>${statusInfo}</td>
+                    <td>${createdDate}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <select class="role-select" onchange="changeUserRole('${user.id}', this.value)">
+                                <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
+                                <option value="developer" ${user.role === 'developer' ? 'selected' : ''}>Developer</option>
+                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                <option value="owner" ${user.role === 'owner' ? 'selected' : ''}>Owner</option>
+                            </select>
+                            <select class="tier-select" onchange="changeUserTier('${user.id}', this.value)">
+                                <option value="1" ${userTier === 1 ? 'selected' : ''}>Tier 1</option>
+                                <option value="2" ${userTier === 2 ? 'selected' : ''}>Tier 2</option>
+                                <option value="3" ${userTier === 3 ? 'selected' : ''}>Tier 3</option>
+                            </select>
+                            ${user.banned ? 
+                                `<button class="action-btn btn-success" onclick="unbanUser('${user.id}')">Unban</button>` :
+                                `<button class="action-btn btn-danger" onclick="showBanModal('${user.id}', '${escapeHtml(user.username)}')">Ban</button>`
+                            }
+                            ${(user.muted && user.muteEnd > Date.now()) ?
+                                `<button class="action-btn btn-success" onclick="unmuteUser('${user.id}')">Unmute</button>` :
+                                `<button class="action-btn btn-warning" onclick="showMuteModal('${user.id}', '${escapeHtml(user.username)}')">Mute</button>`
+                            }
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        function filterUsers() {
+            const searchTerm = document.getElementById('userSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#usersTableBody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const username = row.cells[0].textContent.toLowerCase();
+                if (username.includes(searchTerm)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('filteredCount').textContent = visibleCount;
+        }
+
+        function updateFilteredCount() {
+            document.getElementById('filteredCount').textContent = users.length;
+        }
+
+        // User management functions
+        function changeUserRole(userId, newRole) {
+            if (!confirm(`Are you sure you want to change this user's role to ${newRole}?`)) {
+                loadUsers(); // Reload to reset the dropdown
+                return;
+            }
+
+            fetch(`/api/admin/users/${userId}/role`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({ role: newRole })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showMessage(data.error, 'error');
+                } else {
+                    showMessage(`Role updated to ${newRole}`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                }
+            })
+            .catch(err => {
+                showMessage('Failed to update role', 'error');
+                loadUsers(); // Reload to reset the dropdown
+            });
+        }
+
+        function changeUserTier(userId, newTier) {
+            const tierNum = parseInt(newTier);
+            if (!confirm(`Are you sure you want to change this user's tier to ${tierNum}?`)) {
+                loadUsers(); // Reload to reset the dropdown
+                return;
+            }
+
+            fetch(`/api/admin/users/${userId}/tier`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({ tier: tierNum })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showMessage(data.error, 'error');
+                } else {
+                    showMessage(`Tier updated to ${tierNum}`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                }
+            })
+            .catch(err => {
+                showMessage('Failed to update tier', 'error');
+                loadUsers(); // Reload to reset the dropdown
+            });
+        }
+
+        // Ban Modal Functions
+        function showBanModal(userId, username) {
+            currentBanUserId = userId;
+            document.getElementById('banUsername').textContent = username;
+            document.getElementById('banReason').value = '';
+            document.getElementById('banModal').style.display = 'block';
+        }
+
+        function closeBanModal() {
+            document.getElementById('banModal').style.display = 'none';
+            currentBanUserId = null;
+        }
+
+        function confirmBan() {
+            if (!currentBanUserId) return;
+
+            const reason = document.getElementById('banReason').value.trim();
+            
+            fetch(`/api/admin/users/${currentBanUserId}/ban`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({ reason: reason || 'Banned by admin via admin panel' })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Ban failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`User banned successfully`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                    closeBanModal();
+                }
+            })
+            .catch(err => {
+                console.error('Ban error:', err);
+                showMessage(`Failed to ban user: ${err.message}`, 'error');
+            });
+        }
+
+        function unbanUser(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) {
+                showMessage('User not found', 'error');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to unban user "${user.username}"? They will be able to login again.`)) {
+                return;
+            }
+
+            fetch(`/api/admin/users/${userId}/unban`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Unban failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`User "${user.username}" unbanned successfully`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                }
+            })
+            .catch(err => {
+                console.error('Unban error:', err);
+                showMessage(`Failed to unban user: ${err.message}`, 'error');
+            });
+        }
+
+        // Mute Modal Functions
+        function showMuteModal(userId, username) {
+            currentMuteUserId = userId;
+            document.getElementById('muteUsername').textContent = username;
+            document.getElementById('muteReason').value = '';
+            document.getElementById('muteDuration').value = '1h';
+            document.getElementById('muteModal').style.display = 'block';
+        }
+
+        function closeMuteModal() {
+            document.getElementById('muteModal').style.display = 'none';
+            currentMuteUserId = null;
+        }
+
+        function confirmMute() {
+            if (!currentMuteUserId) return;
+
+            const duration = document.getElementById('muteDuration').value;
+            const reason = document.getElementById('muteReason').value.trim();
+            
+            fetch(`/api/admin/users/${currentMuteUserId}/mute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({ 
+                    duration: duration,
+                    reason: reason || 'Muted by admin via admin panel'
+                })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Mute failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`User muted successfully`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                    closeMuteModal();
+                }
+            })
+            .catch(err => {
+                console.error('Mute error:', err);
+                showMessage(`Failed to mute user: ${err.message}`, 'error');
+            });
+        }
+
+        function unmuteUser(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) {
+                showMessage('User not found', 'error');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to unmute user "${user.username}"?`)) {
+                return;
+            }
+
+            fetch(`/api/admin/users/${userId}/unmute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Unmute failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`User "${user.username}" unmuted successfully`, 'success');
+                    loadUsers(); // Reload users to reflect changes
+                }
+            })
+            .catch(err => {
+                console.error('Unmute error:', err);
+                showMessage(`Failed to unmute user: ${err.message}`, 'error');
+            });
+        }
+
+        // Download backup function
+        function downloadBackup() {
+            if (!apiKey) {
+                showMessage('Not authenticated', 'error');
+                return;
+            }
+
+            showMessage('Preparing backup download...', 'success');
+            
+            fetch('/api/admin/backup', {
+                method: 'GET',
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `pulsechat-backup-${new Date().toISOString().split('T')[0]}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showMessage('Backup downloaded successfully!', 'success');
+            })
+            .catch(err => {
+                console.error('Backup download error:', err);
+                showMessage(`Failed to download backup: ${err.message}`, 'error');
+            });
+        }
+
+        // Utility functions
+        function showMessage(message, type) {
+            const container = document.getElementById('messageContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${type}-message`;
+            messageDiv.textContent = message;
+            
+            container.innerHTML = '';
+            container.appendChild(messageDiv);
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 5000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-refresh stats every 30 seconds
+        setInterval(() => {
+            if (apiKey) {
+                loadStats();
+            }
+        }, 30000);
+
+        // Handle Enter key for API key input
+        document.getElementById('apiKey').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                authenticate();
+            }
+        });
+
+        // Modal click outside to close
+        window.onclick = function(event) {
+            const banModal = document.getElementById('banModal');
+            const muteModal = document.getElementById('muteModal');
+            if (event.target === banModal) {
+                closeBanModal();
+            }
+            if (event.target === muteModal) {
+                closeMuteModal();
+            }
+        }
+    </script>
+</body>
+</html>

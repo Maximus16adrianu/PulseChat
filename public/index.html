@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseChat</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <!-- Auto-login indicator -->
+    <div id="autoLoginIndicator" class="auto-login-indicator hidden">
+        <div class="login-content">
+            <div class="pulse-logo">
+                <div class="pulse-icon"></div>
+                <h3>PulseChat</h3>
+            </div>
+            <p>Logging you in...</p>
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content auth-modal">
+            <div class="auth-header">
+                <div class="pulse-logo">
+                    <div class="pulse-icon"></div>
+                    <h2>PulseChat</h2>
+                </div>
+                <p>Welcome back! Sign in to continue</p>
+            </div>
+            
+            <form class="auth-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" required>
+                </div>
+                <div class="auth-buttons">
+                    <button type="button" class="btn btn-primary" onclick="login()">Sign In</button>
+                    <button type="button" class="btn btn-secondary" onclick="showRegister()">Create Account</button>
+                </div>
+            </form>
+            
+            <div id="authMessage" class="message-display"></div>
+        </div>
+    </div>
+
+    <!-- Registration Modal -->
+    <div id="registerModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content auth-modal">
+            <div class="auth-header">
+                <div class="pulse-logo">
+                    <div class="pulse-icon"></div>
+                    <h2>Join PulseChat</h2>
+                </div>
+                <p>Create your account to get started</p>
+            </div>
+            
+            <form class="auth-form">
+                <div class="form-group">
+                    <label for="regUsername">Username</label>
+                    <input type="text" id="regUsername" placeholder="Choose a username" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Password</label>
+                    <input type="password" id="regPassword" placeholder="Create a secure password" required>
+                </div>
+                <div class="auth-buttons">
+                    <button type="button" class="btn btn-primary" onclick="register()">Create Account</button>
+                    <button type="button" class="btn btn-secondary" onclick="showLogin()">Back to Sign In</button>
+                </div>
+            </form>
+            
+            <div id="regMessage" class="message-display"></div>
+        </div>
+    </div>
+
+    <!-- Friends Management Modal -->
+    <div id="friendsManagementModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Manage Friends</h2>
+                <button class="btn-close" onclick="closeFriendsManagement()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="tab-navigation">
+                <button class="tab-btn active" onclick="switchTab('addFriend')">Add Friend</button>
+                <button class="tab-btn" onclick="switchTab('unblockUsers')">Unblock Users</button>
+            </div>
+            
+            <div class="tab-content-container">
+                <!-- Add Friend Tab -->
+                <div id="addFriendTab" class="tab-content active">
+                    <div class="form-group">
+                        <label for="friendUsername">Username</label>
+                        <input type="text" id="friendUsername" placeholder="Enter username to add">
+                    </div>
+                    <button class="btn btn-primary" onclick="sendFriendRequest()">Send Friend Request</button>
+                    <div id="friendMessage" class="message-display"></div>
+                </div>
+                
+                <!-- Unblock Users Tab -->
+                <div id="unblockUsersTab" class="tab-content">
+                    <div id="blockedUsersList" class="user-list">
+                        <div class="empty-state">No blocked users</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="btn-close" onclick="closeSettings()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="settings-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label for="allowFriendRequests">Allow Friend Requests</label>
+                        <p>Let others send you friend requests</p>
+                    </div>
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="allowFriendRequests" checked>
+                        <label for="allowFriendRequests" class="switch"></label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+            </div>
+            
+            <div id="settingsMessage" class="message-display"></div>
+        </div>
+    </div>
+
+    <!-- Ban Reason Modal -->
+    <div id="banReasonModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Ban User</h2>
+                <button class="btn-close" onclick="closeBanModal()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label for="banReason">Reason (optional)</label>
+                <textarea id="banReason" placeholder="Enter reason for ban..." rows="3"></textarea>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="confirmBan()">Ban User</button>
+                <button class="btn btn-secondary" onclick="closeBanModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div class="app-container hidden" id="mainApp">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Friends Panel -->
+            <div class="friends-section">
+                <div class="section-header">
+                    <h3>Friends</h3>
+                    <button class="btn btn-small btn-primary" onclick="showFriendsManagement()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Manage
+                    </button>
+                </div>
+                
+                <!-- Friend Requests -->
+                <div class="friend-requests-section">
+                    <div class="subsection-header" onclick="toggleFriendRequests()">
+                        <span class="subsection-title">
+                            Friend Requests
+                            <span id="friendRequestsBadge" class="badge hidden">0</span>
+                        </span>
+                        <button class="toggle-btn" id="friendRequestsToggle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="friendRequestsList" class="friend-requests-list">
+                        <div class="empty-state">No pending friend requests</div>
+                    </div>
+                </div>
+                
+                <!-- Friends List -->
+                <div class="friends-list" id="friendsList">
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <p>No friends yet</p>
+                        <p>Add some friends to start chatting!</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <h1 id="chatTitle">Select a friend to start chatting</h1>
+                </div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <span id="currentUsername" class="username"></span>
+                        <span id="userRole" class="role-badge hidden"></span>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-icon" onclick="showSettings()" title="Settings">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </button>
+                        <button class="btn btn-icon btn-danger" onclick="logout()" title="Logout">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16,17 21,12 16,7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Chat Content -->
+            <div class="chat-container">
+                <!-- Messages Area -->
+                <div class="messages-area">
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="empty-state">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <h3>Select a friend to view your conversation</h3>
+                        </div>
+                    </div>
+                    
+                    <!-- Message Input -->
+                    <div class="message-input-area">
+                        <div class="input-container">
+                            <button class="btn btn-icon upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.64 16.2a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                                </svg>
+                            </button>
+                            <textarea 
+                                class="message-input" 
+                                id="messageInput" 
+                                placeholder="Type a message..."
+                                disabled
+                                rows="1"
+                            ></textarea>
+                            <button class="btn btn-primary send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*,video/*" style="display: none;" onchange="uploadFile()">
+                    </div>
+                </div>
+
+                <!-- User Info Panel -->
+                <aside class="user-info-panel hidden" id="userInfoPanel">
+                    <div class="user-profile">
+                        <div class="user-avatar" id="friendAvatar">?</div>
+                        <h3 id="friendInfoUsername" class="user-name">Select a friend</h3>
+                        <span id="friendInfoRole" class="role-badge"></span>
+                    </div>
+                    
+                    <div class="user-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Friends Since</span>
+                            <span class="detail-value" id="friendsSinceDate">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">User Tier</span>
+                            <span class="detail-value" id="friendTier">-</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Role</span>
+                            <span class="detail-value" id="friendRoleInfo">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="user-actions">
+                        <button class="btn btn-danger" id="blockBtn" onclick="blockUser()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M4.93 4.93l14.14 14.14"></path>
+                            </svg>
+                            Block User
+                        </button>
+                        
+                        <!-- Admin Actions -->
+                        <div class="admin-actions hidden" id="adminActions">
+                            <div class="admin-section-title">Admin Actions</div>
+                            
+                            <div class="admin-action-group">
+                                <label for="muteDuration">Mute Duration</label>
+                                <select class="form-select" id="muteDuration">
+                                    <option value="1h">1 Hour</option>
+                                    <option value="1d">1 Day</option>
+                                    <option value="1w">1 Week</option>
+                                </select>
+                                <button class="btn btn-warning" onclick="muteUser()">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                        <line x1="23" y1="9" x2="17" y2="15"></line>
+                                        <line x1="17" y1="9" x2="23" y2="15"></line>
+                                    </svg>
+                                    Mute User
+                                </button>
+                            </div>
+                            
+                            <button class="btn btn-danger" onclick="showBanModal()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10 2v20"></path>
+                                    <path d="M14 2v20"></path>
+                                    <path d="M4 7h16"></path>
+                                    <path d="M4 17h16"></path>
+                                </svg>
+                                Ban User
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

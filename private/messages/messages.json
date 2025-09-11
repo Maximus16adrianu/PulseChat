@@ -1,0 +1,18 @@
+[
+  {
+    "id": "afa2ff8f62ee2239b88208543cb2d2af",
+    "senderId": "31cc386ae217da3401418f5bb095e375",
+    "receiverId": "8a7391af22a4fd3176ef138fe06f804a",
+    "content": "awdawawd",
+    "type": "text",
+    "timestamp": 1757618621323
+  },
+  {
+    "id": "b868f447e34566eb80dd487430b1f1f5",
+    "senderId": "8a7391af22a4fd3176ef138fe06f804a",
+    "receiverId": "31cc386ae217da3401418f5bb095e375",
+    "content": "d",
+    "type": "text",
+    "timestamp": 1757619865152
+  }
+]

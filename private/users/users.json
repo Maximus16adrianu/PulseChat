@@ -1,0 +1,26 @@
+[
+  {
+    "id": "8a7391af22a4fd3176ef138fe06f804a",
+    "username": "Cerial",
+    "password": "Cerial",
+    "tier": 1,
+    "role": "owner",
+    "banned": false,
+    "created": 1757617615687,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "31cc386ae217da3401418f5bb095e375",
+    "username": "Tomate",
+    "password": "Tomate",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757617650139,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  }
+]
