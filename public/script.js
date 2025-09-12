@@ -176,7 +176,10 @@ function updateProfileTab() {
     }
     
     if (PulseChat.elements.profileTier) {
-        PulseChat.elements.profileTier.textContent = `Tier ${PulseChat.currentUser.tier || 1}`;
+        const userRole = PulseChat.currentUser.role || 'user';
+        const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+        const displayTier = hasSpecialRole ? 3 : (PulseChat.currentUser.tier || 1);
+        PulseChat.elements.profileTier.textContent = `Tier ${displayTier}`;
     }
     
     if (PulseChat.elements.profileRole) {
