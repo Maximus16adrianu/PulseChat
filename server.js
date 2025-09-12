@@ -23,6 +23,18 @@ const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
 const CALL_TIMEOUT = 60 * 1000; // 60 seconds for call to be answered
 
+// WebRTC Configuration with STUN servers for NAT traversal
+const WEBRTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ],
+  iceCandidatePoolSize: 10
+};
+
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
@@ -691,6 +703,9 @@ io.on('connection', (socket) => {
       socket.userId = user.id;
       socket.emit('authenticated', { user: { ...user, password: undefined } });
       
+      // Send WebRTC configuration to client
+      socket.emit('webrtc_config', WEBRTC_CONFIG);
+      
       // Load and send friends list with full user details (including call status)
       const friends = await loadJSON('private/friends/friends.json');
       const userFriends = friends.filter(f => 
@@ -829,7 +844,8 @@ io.on('connection', (socket) => {
         receiverId,
         status: 'ringing',
         startTime: Date.now(),
-        timeout: null
+        timeout: null,
+        iceCandidates: { caller: [], receiver: [] } // Store ICE candidates
       };
       
       // Set timeout for call
@@ -839,18 +855,20 @@ io.on('connection', (socket) => {
       
       activeCalls.set(callId, call);
       
-      // Notify receiver
+      // Notify receiver with WebRTC config
       receiverSocket.emit('incoming_call', {
         callId,
         callerId: socket.userId,
-        callerUsername: caller.username
+        callerUsername: caller.username,
+        webrtcConfig: WEBRTC_CONFIG
       });
       
       // Notify caller
       socket.emit('call_initiated', {
         callId,
         receiverId,
-        receiverUsername: receiver.username
+        receiverUsername: receiver.username,
+        webrtcConfig: WEBRTC_CONFIG
       });
       
       console.log(`Call initiated: ${caller.username} -> ${receiver.username} (${callId})`);
@@ -893,14 +911,20 @@ io.on('connection', (socket) => {
       call.status = 'connecting';
       call.acceptTime = Date.now();
       
-      // Notify both participants
+      // Notify both participants with WebRTC config
       const callerSocket = getSocketByUserId(call.callerId);
       
       if (callerSocket) {
-        callerSocket.emit('call_accepted', { callId });
+        callerSocket.emit('call_accepted', { 
+          callId,
+          webrtcConfig: WEBRTC_CONFIG
+        });
       }
       
-      socket.emit('call_accepted', { callId });
+      socket.emit('call_accepted', { 
+        callId,
+        webrtcConfig: WEBRTC_CONFIG
+      });
       
       console.log(`Call accepted: ${callId}`);
       
@@ -960,7 +984,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // WebRTC signaling events
+  // WebRTC signaling events with improved ICE handling
   socket.on('webrtc_offer', async (data) => {
     try {
       if (!socket.userId) return;
@@ -978,10 +1002,24 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Forward offer to receiver
+      // Store the offer
+      call.offer = offer;
+      
+      // Forward offer to receiver with WebRTC config
       const receiverSocket = getSocketByUserId(call.receiverId);
       if (receiverSocket) {
-        receiverSocket.emit('webrtc_offer', { callId, offer });
+        receiverSocket.emit('webrtc_offer', { 
+          callId, 
+          offer,
+          webrtcConfig: WEBRTC_CONFIG
+        });
+        
+        // Send any stored ICE candidates from caller
+        if (call.iceCandidates.caller.length > 0) {
+          call.iceCandidates.caller.forEach(candidate => {
+            receiverSocket.emit('webrtc_ice_candidate', { callId, candidate });
+          });
+        }
       }
       
     } catch (error) {
@@ -1010,11 +1048,23 @@ io.on('connection', (socket) => {
       // Update call status to connected
       call.status = 'connected';
       call.connectTime = Date.now();
+      call.answer = answer;
       
       // Forward answer to caller
       const callerSocket = getSocketByUserId(call.callerId);
       if (callerSocket) {
-        callerSocket.emit('webrtc_answer', { callId, answer });
+        callerSocket.emit('webrtc_answer', { 
+          callId, 
+          answer,
+          webrtcConfig: WEBRTC_CONFIG
+        });
+        
+        // Send any stored ICE candidates from receiver
+        if (call.iceCandidates.receiver.length > 0) {
+          call.iceCandidates.receiver.forEach(candidate => {
+            callerSocket.emit('webrtc_ice_candidate', { callId, candidate });
+          });
+        }
       }
       
       console.log(`Call connected: ${callId}`);
@@ -1042,17 +1092,65 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Forward ICE candidate to the other participant
-      const otherUserId = call.callerId === socket.userId ? call.receiverId : call.callerId;
+      const isCaller = call.callerId === socket.userId;
+      const otherUserId = isCaller ? call.receiverId : call.callerId;
       const otherSocket = getSocketByUserId(otherUserId);
       
+      // Store ICE candidate for later if needed
+      if (isCaller) {
+        call.iceCandidates.caller.push(candidate);
+      } else {
+        call.iceCandidates.receiver.push(candidate);
+      }
+      
+      // Forward ICE candidate to the other participant immediately if they're ready
       if (otherSocket) {
-        otherSocket.emit('webrtc_ice_candidate', { callId, candidate });
+        // Only send if the call has progressed far enough
+        if ((isCaller && call.status === 'connecting' && call.answer) ||
+            (!isCaller && call.status === 'connecting' && call.offer)) {
+          otherSocket.emit('webrtc_ice_candidate', { callId, candidate });
+        }
       }
       
     } catch (error) {
       console.error('WebRTC ICE candidate error:', error);
       socket.emit('call_error', 'Failed to send ICE candidate');
+    }
+  });
+  
+  // Add connection state monitoring
+  socket.on('webrtc_connection_state', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId, state } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) return;
+      
+      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) return;
+      
+      // Update call with connection state
+      const isCaller = call.callerId === socket.userId;
+      if (isCaller) {
+        call.callerConnectionState = state;
+      } else {
+        call.receiverConnectionState = state;
+      }
+      
+      // If connection failed, end the call
+      if (state === 'failed' || state === 'disconnected') {
+        setTimeout(() => {
+          if (activeCalls.has(callId)) {
+            endCall(callId, 'Connection lost');
+          }
+        }, 5000); // Give 5 seconds to reconnect
+      }
+      
+      console.log(`Call ${callId} - ${isCaller ? 'Caller' : 'Receiver'} connection state: ${state}`);
+      
+    } catch (error) {
+      console.error('WebRTC connection state error:', error);
     }
   });
   
@@ -2093,7 +2191,7 @@ async function start() {
     console.log(`PulseChat server running on port ${PORT}`);
     console.log(`Admin API key: ${ADMIN_API_KEY}`);
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
-    console.log(`WebRTC calling enabled with P2P connections`);
+    console.log(`WebRTC calling enabled with proper STUN server configuration`);
   });
 }
 
