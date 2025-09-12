@@ -54,5 +54,421 @@
     "content": "Okay",
     "type": "text",
     "timestamp": 1757638664395
+  },
+  {
+    "id": "70cc8e064264eb154598ea14f5f4655c",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "Heyya",
+    "type": "text",
+    "timestamp": 1757676298370
+  },
+  {
+    "id": "985752a7ea60fe9704a8fda75103f3f1",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "1757676387865-850360040.mp4",
+    "type": "video",
+    "timestamp": 1757676387867
+  },
+  {
+    "id": "2221a4f5e33cd06fb08511af89e80859",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "b2f37103125da81537624562314ec70c",
+    "content": "Hey",
+    "type": "text",
+    "timestamp": 1757676410283
+  },
+  {
+    "id": "e8b0e661ee30b01ac8dacd69c68041f6",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "b2f37103125da81537624562314ec70c",
+    "content": "I just added full mobile support",
+    "type": "text",
+    "timestamp": 1757676418199
+  },
+  {
+    "id": "ea23af7053a270f65d20ee6c6c40b107",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "1757676762309-824924372.mp4",
+    "type": "video",
+    "timestamp": 1757676762313
+  },
+  {
+    "id": "6ad6daca3730a938fbc3b61bcab1bbba",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "#fuck the government",
+    "type": "text",
+    "timestamp": 1757676905777
+  },
+  {
+    "id": "b3288bfd85c0e036d36e9ed6947bd6ce",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "hey",
+    "type": "text",
+    "timestamp": 1757677242969
+  },
+  {
+    "id": "5b200f4c2889900448f5cfce7f31e9f4",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "selber hey",
+    "type": "text",
+    "timestamp": 1757677256379
+  },
+  {
+    "id": "f2bdd95005d4a74428d7689a8eee173c",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "design eig doch ganz gut oder nd",
+    "type": "text",
+    "timestamp": 1757677270054
+  },
+  {
+    "id": "c8017c00497990aca63ea85ed5a53e59",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "man schreibt nicht - hey",
+    "type": "text",
+    "timestamp": 1757677278218
+  },
+  {
+    "id": "e2459bbfe8b4c8e1911e600c368953a5",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "bruh",
+    "type": "text",
+    "timestamp": 1757677287308
+  },
+  {
+    "id": "40379934d056fc35a0e684b8d499d8e3",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "hallo oder na du",
+    "type": "text",
+    "timestamp": 1757677303038
+  },
+  {
+    "id": "27ca85f97d368e10d567bc0439dd2f3a",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "\"na du\" rentner",
+    "type": "text",
+    "timestamp": 1757677315667
+  },
+  {
+    "id": "002a7ab489adc78a5df9d3e4cb31aa1b",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "na du scheisserchen",
+    "type": "text",
+    "timestamp": 1757677328568
+  },
+  {
+    "id": "ab8776f0f7ad48c95e8bd3082c4de7a5",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "warum so ein komischer username",
+    "type": "text",
+    "timestamp": 1757677339418
+  },
+  {
+    "id": "6c17776cfb611b70014b5cb7865d7de0",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "wieso komisch",
+    "type": "text",
+    "timestamp": 1757677352359
+  },
+  {
+    "id": "f7a4ab93936d6269a7d20958f89e988f",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "\"demofreund\"",
+    "type": "text",
+    "timestamp": 1757677357537
+  },
+  {
+    "id": "e69910135adff6e8ac54e1770960742c",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "1757677393569-500871448.mp4",
+    "type": "video",
+    "timestamp": 1757677393575
+  },
+  {
+    "id": "e206d3c43fbab703041d687f0002dc7f",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "funktioniert",
+    "type": "text",
+    "timestamp": 1757677414738
+  },
+  {
+    "id": "61ab56ea2ad7288e19104950bd28aad1",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "und weiter????",
+    "type": "text",
+    "timestamp": 1757677428415
+  },
+  {
+    "id": "6512bf2f078799313859cee0081240d7",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "weiter nichts aber ab jz ist das auch eien chat platform wie whtsapp, discord ec",
+    "type": "text",
+    "timestamp": 1757677445201
+  },
+  {
+    "id": "b3925c7800e586698b40785ffd6d6547",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "bei dir steht owner - WOW",
+    "type": "text",
+    "timestamp": 1757677456881
+  },
+  {
+    "id": "e4c02c58c6274c7fa517dc462d7e0c54",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "deutsch 1+",
+    "type": "text",
+    "timestamp": 1757677456928
+  },
+  {
+    "id": "16f004497d855ab209c5d18c4177abb7",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "ja owner",
+    "type": "text",
+    "timestamp": 1757677463305
+  },
+  {
+    "id": "f1b1802e0209cd0c4529a829ff07c84c",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "= besitzer",
+    "type": "text",
+    "timestamp": 1757677467834
+  },
+  {
+    "id": "f0357daeb91b7a69045f3266fd1359f2",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "bei dir steht user tier 1",
+    "type": "text",
+    "timestamp": 1757677478469
+  },
+  {
+    "id": "f6aa8c91cec620dd4a37e133d5a10f0d",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "wenn du tier 2 hättest kannst du bilder hochladen und mit tier 3 auch videos",
+    "type": "text",
+    "timestamp": 1757677504615
+  },
+  {
+    "id": "dc2c34d708571630ec0bfd979f487eb8",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "nee, demofreund",
+    "type": "text",
+    "timestamp": 1757677505028
+  },
+  {
+    "id": "bd851cfb6378e6179344ad5855e66a08",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "aaaa",
+    "type": "text",
+    "timestamp": 1757677528679
+  },
+  {
+    "id": "3d7e47dd57630d8a7ce5674276b4ff50",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "\"\nUser Tier Tier 1\nRole USER\n\"",
+    "type": "text",
+    "timestamp": 1757677533606
+  },
+  {
+    "id": "1c6d5bf8b9878b270305039ccc596bff",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "deshalb konnte ich kein bild schicken",
+    "type": "text",
+    "timestamp": 1757677551206
+  },
+  {
+    "id": "eedafde0ff69b6e3ff091eecd070e67f",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "warum",
+    "type": "text",
+    "timestamp": 1757677554801
+  },
+  {
+    "id": "a849443a8b343144e6f3860bae6454bb",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "jeder der hier neu ist kann nur chatten",
+    "type": "text",
+    "timestamp": 1757677563248
+  },
+  {
+    "id": "d2a18f5e48ae90d81bc5eaee967482aa",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "speicherplatz und so",
+    "type": "text",
+    "timestamp": 1757677566599
+  },
+  {
+    "id": "20eb40b50f9b15f919dc38e320cf1454",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "doof",
+    "type": "text",
+    "timestamp": 1757677573050
+  },
+  {
+    "id": "5e73e65d6a2bac686960ea46ef41d3a6",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "ich bin kein multi mellionen dollar unternehmen",
+    "type": "text",
+    "timestamp": 1757677588170
+  },
+  {
+    "id": "16bc6c967670d1676e5bdeb37a04b22f",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "musst du server mieten",
+    "type": "text",
+    "timestamp": 1757677592407
+  },
+  {
+    "id": "e7ba04c1247de54508cd31041d68da56",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "millionen bitte",
+    "type": "text",
+    "timestamp": 1757677605908
+  },
+  {
+    "id": "1390b298ebbff8ad3a7dcb4779e31e66",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "bruh",
+    "type": "text",
+    "timestamp": 1757677609953
+  },
+  {
+    "id": "13eacc5bac93de4ccaeecb6fe9c1e8bc",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "deutsch 6",
+    "type": "text",
+    "timestamp": 1757677611970
+  },
+  {
+    "id": "21cc7b9801807d88b6014f3ff44ac63c",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "setzen",
+    "type": "text",
+    "timestamp": 1757677615559
+  },
+  {
+    "id": "32918e62d2e6119adaa6cc82de6e4a31",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "jetzt solltest du bilder und videos senden können",
+    "type": "text",
+    "timestamp": 1757677625315
+  },
+  {
+    "id": "e4b87b5420f78bf105de9ce5afb94aba",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "nö",
+    "type": "text",
+    "timestamp": 1757677642719
+  },
+  {
+    "id": "b730186550dec4a52478319a4b0e99c3",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "was für nö",
+    "type": "text",
+    "timestamp": 1757677649328
+  },
+  {
+    "id": "db2f27cbbc99e17d60236f924372e13d",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "kann ich nicht",
+    "type": "text",
+    "timestamp": 1757677662689
+  },
+  {
+    "id": "7e07ae68dd30aca7406074511e282b2e",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "aktualisier mal die seite",
+    "type": "text",
+    "timestamp": 1757677668187
+  },
+  {
+    "id": "b86e4898b3c2289499a6c9368f9b1986",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "1757677695227-936190844.jpg",
+    "type": "image",
+    "timestamp": 1757677695229
+  },
+  {
+    "id": "81034bb4c0aa628975651dfa12ee603c",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "jupp",
+    "type": "text",
+    "timestamp": 1757677701170
+  },
+  {
+    "id": "838a7a3f712b3c80a194944b9fde2814",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "ist doch eig ganz okay zum chatten hier",
+    "type": "text",
+    "timestamp": 1757677726866
+  },
+  {
+    "id": "9701393e5cb7f4550912e0fa2e0a313a",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "gut muss jetzt weiter machen.",
+    "type": "text",
+    "timestamp": 1757677728369
+  },
+  {
+    "id": "21e46b25aee2e54871ec9822fd6961c3",
+    "senderId": "4246c571aeec7c035cbdb95fdd23194b",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "hdl",
+    "type": "text",
+    "timestamp": 1757677731578
+  },
+  {
+    "id": "ae9373d326413221d79cf705fd9ea967",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "4246c571aeec7c035cbdb95fdd23194b",
+    "content": "okay bis dann",
+    "type": "text",
+    "timestamp": 1757677732717
   }
 ]

@@ -431,13 +431,38 @@ PulseChat.socket.on('message_sent', (message) => {
 });
 
 PulseChat.socket.on('message_deleted', (data) => {
+    // Remove from local messages array first
+    PulseChat.messages = PulseChat.messages.filter(m => m.id !== data.messageId);
+    
+    // Find and remove the message element
     const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
     if (messageElement) {
         messageElement.style.opacity = '0';
         messageElement.style.transform = 'translateY(-20px)';
-        setTimeout(() => messageElement.remove(), 300);
+        setTimeout(() => {
+            if (messageElement.parentNode) {
+                messageElement.parentNode.removeChild(messageElement);
+            }
+            
+            // Check if container is now empty and show empty state if needed
+            const container = PulseChat.elements.messagesContainer;
+            const remainingMessages = container.querySelectorAll('.message');
+            if (remainingMessages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        <h3>No messages yet</h3>
+                        <p>Start your conversation!</p>
+                    </div>
+                `;
+            }
+        }, 300);
+    } else {
+        // If element not found, just re-render all messages to ensure consistency
+        renderMessages();
     }
-    PulseChat.messages = PulseChat.messages.filter(m => m.id !== data.messageId);
 });
 
 PulseChat.socket.on('message_error', (message) => {
@@ -947,7 +972,7 @@ function addMessageToChat(message, scroll = true) {
                     <source src="/api/media/${message.content}" type="video/mp4">
                     <source src="/api/media/${message.content}" type="video/webm">
                     Your browser does not support the video tag.
-                </video>
+                </source>
             </div>
             ${actionsHtml}
         `;

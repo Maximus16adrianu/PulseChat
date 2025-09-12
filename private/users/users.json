@@ -46,5 +46,29 @@
     "settings": {
       "allowFriendRequests": true
     }
+  },
+  {
+    "id": "4246c571aeec7c035cbdb95fdd23194b",
+    "username": "demofreund",
+    "password": "@12ab:09",
+    "tier": 3,
+    "role": "user",
+    "banned": false,
+    "created": 1757677120004,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "132531116ffdadeef36522f2488f7ba9",
+    "username": "Test",
+    "password": "Test",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757677170102,
+    "settings": {
+      "allowFriendRequests": true
+    }
   }
 ]
