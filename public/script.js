@@ -11,6 +11,7 @@ const PulseChat = {
     messages: [],
     friendRequestsVisible: true,
     userToBan: null,
+    currentSettingsTab: 'profile',
     
     // UI Elements Cache
     elements: {
@@ -86,6 +87,17 @@ const PulseChat = {
         banReason: document.getElementById('banReason'),
         muteDuration: document.getElementById('muteDuration'),
         
+        // Settings Profile Elements
+        profileUsername: document.getElementById('profileUsername'),
+        profileTier: document.getElementById('profileTier'),
+        profileRole: document.getElementById('profileRole'),
+        tierBenefitsList: document.getElementById('tierBenefitsList'),
+        
+        // Settings Tab Elements
+        profileTab: document.getElementById('profileTab'),
+        privacyTab: document.getElementById('privacyTab'),
+        aboutTab: document.getElementById('aboutTab'),
+        
         // Message displays
         authMessage: document.getElementById('authMessage'),
         regMessage: document.getElementById('regMessage'),
@@ -98,6 +110,129 @@ const PulseChat = {
         notificationContainer: document.getElementById('notificationContainer')
     }
 };
+
+// ===== Tier Benefits Configuration =====
+const TIER_BENEFITS = {
+    1: [
+        { text: 'Basic messaging', available: true },
+        { text: 'Friend system', available: true },
+        { text: 'Image uploads', available: false },
+        { text: 'Video uploads', available: false }
+    ],
+    2: [
+        { text: 'Basic messaging', available: true },
+        { text: 'Friend system', available: true },
+        { text: 'Image uploads', available: true },
+        { text: 'Video uploads', available: false }
+    ],
+    3: [
+        { text: 'Basic messaging', available: true },
+        { text: 'Friend system', available: true },
+        { text: 'Image uploads', available: true },
+        { text: 'Video uploads', available: true }
+    ]
+};
+
+// ===== Settings Functions =====
+
+function switchSettingsTab(tabName) {
+    PulseChat.currentSettingsTab = tabName;
+    
+    // Update tab buttons
+    document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Update tab content
+    document.querySelectorAll('.settings-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Activate selected tab
+    const tabButton = Array.from(document.querySelectorAll('.settings-tab-btn')).find(btn => 
+        btn.textContent.toLowerCase().includes(tabName.toLowerCase())
+    );
+    if (tabButton) {
+        tabButton.classList.add('active');
+    }
+    
+    const tabContent = document.getElementById(`${tabName}Tab`);
+    if (tabContent) {
+        tabContent.classList.add('active');
+    }
+    
+    // Update profile tab content if it's the active tab
+    if (tabName === 'profile' && PulseChat.currentUser) {
+        updateProfileTab();
+    }
+}
+
+function updateProfileTab() {
+    if (!PulseChat.currentUser) return;
+    
+    // Update profile information
+    if (PulseChat.elements.profileUsername) {
+        PulseChat.elements.profileUsername.textContent = PulseChat.currentUser.username;
+    }
+    
+    if (PulseChat.elements.profileTier) {
+        PulseChat.elements.profileTier.textContent = `Tier ${PulseChat.currentUser.tier || 1}`;
+    }
+    
+    if (PulseChat.elements.profileRole) {
+        const roleElement = PulseChat.elements.profileRole;
+        const role = PulseChat.currentUser.role || 'user';
+        roleElement.textContent = role.toUpperCase();
+        roleElement.className = `role-badge ${role}`;
+    }
+    
+    // Update tier benefits
+    updateTierBenefits();
+}
+
+function updateTierBenefits() {
+    if (!PulseChat.elements.tierBenefitsList || !PulseChat.currentUser) return;
+    
+    const userTier = PulseChat.currentUser.tier || 1;
+    const userRole = PulseChat.currentUser.role || 'user';
+    const benefits = TIER_BENEFITS[userTier] || TIER_BENEFITS[1];
+    
+    // Special role privileges
+    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+    
+    PulseChat.elements.tierBenefitsList.innerHTML = '';
+    
+    benefits.forEach(benefit => {
+        const benefitDiv = document.createElement('div');
+        let isAvailable = benefit.available || hasSpecialRole;
+        
+        benefitDiv.className = `benefit-item ${isAvailable ? 'available' : 'unavailable'}`;
+        benefitDiv.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                ${isAvailable ? 
+                    '<polyline points="20,6 9,17 4,12"></polyline>' : 
+                    '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'
+                }
+            </svg>
+            <span>${benefit.text}</span>
+        `;
+        
+        PulseChat.elements.tierBenefitsList.appendChild(benefitDiv);
+    });
+    
+    // Add special role note if applicable
+    if (hasSpecialRole) {
+        const specialDiv = document.createElement('div');
+        specialDiv.className = 'benefit-item available';
+        specialDiv.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"></polygon>
+            </svg>
+            <span>All features unlocked (${userRole} privileges)</span>
+        `;
+        PulseChat.elements.tierBenefitsList.appendChild(specialDiv);
+    }
+}
 
 // ===== Mobile Navigation Functions =====
 
@@ -357,6 +492,11 @@ PulseChat.socket.on('authenticated', (data) => {
     if (PulseChat.currentUser.settings) {
         PulseChat.elements.allowFriendRequests.checked = 
             PulseChat.currentUser.settings.allowFriendRequests !== false;
+    }
+    
+    // Update profile tab if it's visible
+    if (PulseChat.currentSettingsTab === 'profile') {
+        updateProfileTab();
     }
 });
 
@@ -1011,13 +1151,17 @@ function uploadFile() {
         return;
     }
     
-    if (isVideo && PulseChat.currentUser.tier < 3 && !['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
+    const userTier = PulseChat.currentUser.tier || 1;
+    const userRole = PulseChat.currentUser.role || 'user';
+    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+    
+    if (isVideo && userTier < 3 && !hasSpecialRole) {
         showNotification('You need Tier 3 to upload videos', 'error');
         fileInput.value = '';
         return;
     }
     
-    if (isImage && PulseChat.currentUser.tier < 2 && !['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
+    if (isImage && userTier < 2 && !hasSpecialRole) {
         showNotification('You need Tier 2 to upload images', 'error');
         fileInput.value = '';
         return;
@@ -1109,6 +1253,10 @@ function confirmBan() {
 
 function showSettings() {
     showModal(PulseChat.elements.settingsModal);
+    
+    // Default to profile tab
+    switchSettingsTab('profile');
+    
     // Close mobile nav if it's open
     if (!PulseChat.elements.mobileNavOverlay.classList.contains('hidden')) {
         closeMobileNav();
@@ -1253,3 +1401,4 @@ window.closeSettings = closeSettings;
 window.saveSettings = saveSettings;
 window.showMobileUserInfo = showMobileUserInfo;
 window.closeMobileUserInfo = closeMobileUserInfo;
+window.switchSettingsTab = switchSettingsTab;
