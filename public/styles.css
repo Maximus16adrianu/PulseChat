@@ -1621,6 +1621,24 @@ body {
   padding: var(--space-3);
 }
 
+/* Character Counter */
+.character-counter {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.character-counter.warning {
+  color: var(--warning-500);
+}
+
+.character-counter.danger {
+  color: var(--danger-500);
+}
+
 /* User Info Panel */
 .user-info-panel {
   width: var(--user-panel-width);
@@ -2078,6 +2096,12 @@ body {
     width: 100%;
     text-align: center;
   }
+  
+  /* Mobile Character Counter */
+  .character-counter {
+    margin-top: var(--space-2);
+    padding: 0 var(--space-1);
+  }
 }
 
 @media (max-width: 640px) {
@@ -2170,6 +2194,11 @@ body {
   /* Increase mobile bottom padding for smaller screens */
   .message-input-area {
     padding-bottom: calc(25px + env(safe-area-inset-bottom, 0px));
+  }
+  
+  /* Character Counter adjustments for small screens */
+  .character-counter {
+    font-size: 0.7rem;
   }
 }
 

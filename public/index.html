@@ -583,6 +583,7 @@
                                 placeholder="Type a message..."
                                 disabled
                                 rows="1"
+                                maxlength="250"
                             ></textarea>
                             <button class="btn btn-primary send-btn" id="sendBtn" onclick="sendMessage()" disabled>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -590,6 +591,9 @@
                                     <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
                                 </svg>
                             </button>
+                        </div>
+                        <div class="character-counter">
+                            <span id="maxChars">250</span>
                         </div>
                         <input type="file" id="fileInput" accept="image/*,video/*" style="display: none;" onchange="uploadFile()">
                     </div>

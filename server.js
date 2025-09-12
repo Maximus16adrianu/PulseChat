@@ -20,6 +20,7 @@ const FRIEND_REQUEST_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 const FIRST_MUTE_DURATION = 60 * 1000; // 1 minute
 const ESCALATED_MUTE_DURATION = 60 * 60 * 1000; // 1 hour
 const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
+const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
 
 // Middleware
 app.use(express.json());
@@ -801,6 +802,17 @@ io.on('connection', (socket) => {
       // Check if user is muted
       if (await isUserMuted(socket.userId)) {
         socket.emit('message_error', 'You are currently muted');
+        return;
+      }
+      
+      // Check message length limit
+      if (!content || content.trim().length === 0) {
+        socket.emit('message_error', 'Message cannot be empty');
+        return;
+      }
+      
+      if (content.length > MAX_MESSAGE_LENGTH) {
+        socket.emit('message_error', `Message too long (${content.length}/${MAX_MESSAGE_LENGTH} characters)`);
         return;
       }
       
