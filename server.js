@@ -21,19 +21,6 @@ const FIRST_MUTE_DURATION = 60 * 1000; // 1 minute
 const ESCALATED_MUTE_DURATION = 60 * 60 * 1000; // 1 hour
 const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
-const CALL_TIMEOUT = 60 * 1000; // 60 seconds for call to be answered
-
-// WebRTC Configuration with STUN servers for NAT traversal
-const WEBRTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' }
-  ],
-  iceCandidatePoolSize: 10
-};
 
 // Middleware
 app.use(express.json());
@@ -63,7 +50,6 @@ const activeUsers = new Map();
 const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
-const activeCalls = new Map(); // Track ongoing calls
 
 // Ensure directories exist
 async function initializeDirectories() {
@@ -148,10 +134,6 @@ function generateUserId() {
 
 function generateSessionToken() {
   return crypto.randomBytes(32).toString('hex');
-}
-
-function generateCallId() {
-  return crypto.randomBytes(8).toString('hex');
 }
 
 function getUserTier(user) {
@@ -416,44 +398,6 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
-// Call management functions
-function isUserInCall(userId) {
-  for (const [callId, call] of activeCalls) {
-    if (call.callerId === userId || call.receiverId === userId) {
-      return callId;
-    }
-  }
-  return null;
-}
-
-function endCall(callId, reason = 'Call ended') {
-  const call = activeCalls.get(callId);
-  if (!call) return false;
-  
-  // Clear timeout if exists
-  if (call.timeout) {
-    clearTimeout(call.timeout);
-  }
-  
-  // Notify both participants
-  const callerSocket = getSocketByUserId(call.callerId);
-  const receiverSocket = getSocketByUserId(call.receiverId);
-  
-  if (callerSocket) {
-    callerSocket.emit('call_ended', { callId, reason });
-  }
-  
-  if (receiverSocket) {
-    receiverSocket.emit('call_ended', { callId, reason });
-  }
-  
-  // Remove from active calls
-  activeCalls.delete(callId);
-  
-  console.log(`Call ${callId} ended: ${reason}`);
-  return true;
-}
-
 // Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
@@ -468,20 +412,13 @@ async function sendUpdatedUserLists(socket, userId) {
       userFriends.map(async (friendship) => {
         const friendId = friendship.user1 === userId ? friendship.user2 : friendship.user1;
         const friendUser = await getUserById(friendId);
-        
-        // Check if friend is online and in a call
-        const friendOnline = activeUsers.has(friendId);
-        const friendInCall = isUserInCall(friendId);
-        
         return {
           ...friendship,
           friendId,
           friendUsername: friendUser ? friendUser.username : 'Unknown User',
           friendRole: friendUser ? friendUser.role : 'user',
           friendTier: friendUser ? getUserTier(friendUser) : 1,
-          friendsSince: friendship.acceptedAt || friendship.timestamp,
-          online: friendOnline,
-          inCall: !!friendInCall
+          friendsSince: friendship.acceptedAt || friendship.timestamp
         };
       })
     );
@@ -703,34 +640,24 @@ io.on('connection', (socket) => {
       socket.userId = user.id;
       socket.emit('authenticated', { user: { ...user, password: undefined } });
       
-      // Send WebRTC configuration to client
-      socket.emit('webrtc_config', WEBRTC_CONFIG);
-      
-      // Load and send friends list with full user details (including call status)
+      // Load and send friends list with full user details
       const friends = await loadJSON('private/friends/friends.json');
       const userFriends = friends.filter(f => 
         (f.user1 === user.id || f.user2 === user.id) && f.status === 'accepted'
       );
       
-      // Populate friend details with call status
+      // Populate friend details
       const friendsWithDetails = await Promise.all(
         userFriends.map(async (friendship) => {
           const friendId = friendship.user1 === user.id ? friendship.user2 : friendship.user1;
           const friendUser = await getUserById(friendId);
-          
-          // Check if friend is online and in a call
-          const friendOnline = activeUsers.has(friendId);
-          const friendInCall = isUserInCall(friendId);
-          
           return {
             ...friendship,
             friendId,
             friendUsername: friendUser ? friendUser.username : 'Unknown User',
             friendRole: friendUser ? friendUser.role : 'user',
             friendTier: friendUser ? getUserTier(friendUser) : 1,
-            friendsSince: friendship.acceptedAt || friendship.timestamp,
-            online: friendOnline,
-            inCall: !!friendInCall
+            friendsSince: friendship.acceptedAt || friendship.timestamp
           };
         })
       );
@@ -773,384 +700,9 @@ io.on('connection', (socket) => {
       socket.emit('friend_requests', requestsWithSenders);
       socket.emit('blocked_users', blockedUsersWithDetails);
       
-      // Check if user was in a call before disconnecting
-      const existingCallId = isUserInCall(user.id);
-      if (existingCallId) {
-        const call = activeCalls.get(existingCallId);
-        if (call) {
-          socket.emit('call_reconnected', {
-            callId: existingCallId,
-            otherUserId: call.callerId === user.id ? call.receiverId : call.callerId,
-            status: call.status
-          });
-        }
-      }
-      
     } catch (error) {
       console.error('Authentication error:', error);
       socket.emit('auth_error', 'Server error');
-    }
-  });
-  
-  // WebRTC Calling Events
-  socket.on('initiate_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { receiverId } = data;
-      const caller = await getUserById(socket.userId);
-      const receiver = await getUserById(receiverId);
-      
-      if (!caller || !receiver) {
-        socket.emit('call_error', 'User not found');
-        return;
-      }
-      
-      // Calls are available to all users (no tier restriction)
-      
-      // Check if they are friends
-      const friendship = await getFriendshipDetails(socket.userId, receiverId);
-      if (!friendship) {
-        socket.emit('call_error', 'Can only call friends');
-        return;
-      }
-      
-      // Check if receiver is online
-      const receiverSocket = getSocketByUserId(receiverId);
-      if (!receiverSocket) {
-        socket.emit('call_error', 'User is not online');
-        return;
-      }
-      
-      // Check if either user is already in a call
-      const callerInCall = isUserInCall(socket.userId);
-      const receiverInCall = isUserInCall(receiverId);
-      
-      if (callerInCall) {
-        socket.emit('call_error', 'You are already in a call');
-        return;
-      }
-      
-      if (receiverInCall) {
-        socket.emit('call_error', 'User is already in a call');
-        return;
-      }
-      
-      // Create call record
-      const callId = generateCallId();
-      const call = {
-        callId,
-        callerId: socket.userId,
-        receiverId,
-        status: 'ringing',
-        startTime: Date.now(),
-        timeout: null,
-        iceCandidates: { caller: [], receiver: [] } // Store ICE candidates
-      };
-      
-      // Set timeout for call
-      call.timeout = setTimeout(() => {
-        endCall(callId, 'Call timeout - no answer');
-      }, CALL_TIMEOUT);
-      
-      activeCalls.set(callId, call);
-      
-      // Notify receiver with WebRTC config
-      receiverSocket.emit('incoming_call', {
-        callId,
-        callerId: socket.userId,
-        callerUsername: caller.username,
-        webrtcConfig: WEBRTC_CONFIG
-      });
-      
-      // Notify caller
-      socket.emit('call_initiated', {
-        callId,
-        receiverId,
-        receiverUsername: receiver.username,
-        webrtcConfig: WEBRTC_CONFIG
-      });
-      
-      console.log(`Call initiated: ${caller.username} -> ${receiver.username} (${callId})`);
-      
-    } catch (error) {
-      console.error('Initiate call error:', error);
-      socket.emit('call_error', 'Failed to initiate call');
-    }
-  });
-  
-  socket.on('accept_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.receiverId !== socket.userId) {
-        socket.emit('call_error', 'Not authorized to accept this call');
-        return;
-      }
-      
-      if (call.status !== 'ringing') {
-        socket.emit('call_error', 'Call is no longer ringing');
-        return;
-      }
-      
-      // Clear timeout
-      if (call.timeout) {
-        clearTimeout(call.timeout);
-        call.timeout = null;
-      }
-      
-      // Update call status
-      call.status = 'connecting';
-      call.acceptTime = Date.now();
-      
-      // Notify both participants with WebRTC config
-      const callerSocket = getSocketByUserId(call.callerId);
-      
-      if (callerSocket) {
-        callerSocket.emit('call_accepted', { 
-          callId,
-          webrtcConfig: WEBRTC_CONFIG
-        });
-      }
-      
-      socket.emit('call_accepted', { 
-        callId,
-        webrtcConfig: WEBRTC_CONFIG
-      });
-      
-      console.log(`Call accepted: ${callId}`);
-      
-    } catch (error) {
-      console.error('Accept call error:', error);
-      socket.emit('call_error', 'Failed to accept call');
-    }
-  });
-  
-  socket.on('decline_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.receiverId !== socket.userId) {
-        socket.emit('call_error', 'Not authorized to decline this call');
-        return;
-      }
-      
-      endCall(callId, 'Call declined');
-      
-    } catch (error) {
-      console.error('Decline call error:', error);
-      socket.emit('call_error', 'Failed to decline call');
-    }
-  });
-  
-  socket.on('hang_up_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) {
-        socket.emit('call_error', 'Not authorized to hang up this call');
-        return;
-      }
-      
-      endCall(callId, 'Call ended by user');
-      
-    } catch (error) {
-      console.error('Hang up call error:', error);
-      socket.emit('call_error', 'Failed to hang up call');
-    }
-  });
-  
-  // WebRTC signaling events with improved ICE handling
-  socket.on('webrtc_offer', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, offer } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.callerId !== socket.userId) {
-        socket.emit('call_error', 'Only caller can send offer');
-        return;
-      }
-      
-      // Store the offer
-      call.offer = offer;
-      
-      // Forward offer to receiver with WebRTC config
-      const receiverSocket = getSocketByUserId(call.receiverId);
-      if (receiverSocket) {
-        receiverSocket.emit('webrtc_offer', { 
-          callId, 
-          offer,
-          webrtcConfig: WEBRTC_CONFIG
-        });
-        
-        // Send any stored ICE candidates from caller
-        if (call.iceCandidates.caller.length > 0) {
-          call.iceCandidates.caller.forEach(candidate => {
-            receiverSocket.emit('webrtc_ice_candidate', { callId, candidate });
-          });
-        }
-      }
-      
-    } catch (error) {
-      console.error('WebRTC offer error:', error);
-      socket.emit('call_error', 'Failed to send offer');
-    }
-  });
-  
-  socket.on('webrtc_answer', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, answer } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.receiverId !== socket.userId) {
-        socket.emit('call_error', 'Only receiver can send answer');
-        return;
-      }
-      
-      // Update call status to connected
-      call.status = 'connected';
-      call.connectTime = Date.now();
-      call.answer = answer;
-      
-      // Forward answer to caller
-      const callerSocket = getSocketByUserId(call.callerId);
-      if (callerSocket) {
-        callerSocket.emit('webrtc_answer', { 
-          callId, 
-          answer,
-          webrtcConfig: WEBRTC_CONFIG
-        });
-        
-        // Send any stored ICE candidates from receiver
-        if (call.iceCandidates.receiver.length > 0) {
-          call.iceCandidates.receiver.forEach(candidate => {
-            callerSocket.emit('webrtc_ice_candidate', { callId, candidate });
-          });
-        }
-      }
-      
-      console.log(`Call connected: ${callId}`);
-      
-    } catch (error) {
-      console.error('WebRTC answer error:', error);
-      socket.emit('call_error', 'Failed to send answer');
-    }
-  });
-  
-  socket.on('webrtc_ice_candidate', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, candidate } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) {
-        socket.emit('call_error', 'Not authorized for this call');
-        return;
-      }
-      
-      const isCaller = call.callerId === socket.userId;
-      const otherUserId = isCaller ? call.receiverId : call.callerId;
-      const otherSocket = getSocketByUserId(otherUserId);
-      
-      // Store ICE candidate for later if needed
-      if (isCaller) {
-        call.iceCandidates.caller.push(candidate);
-      } else {
-        call.iceCandidates.receiver.push(candidate);
-      }
-      
-      // Forward ICE candidate to the other participant immediately if they're ready
-      if (otherSocket) {
-        // Only send if the call has progressed far enough
-        if ((isCaller && call.status === 'connecting' && call.answer) ||
-            (!isCaller && call.status === 'connecting' && call.offer)) {
-          otherSocket.emit('webrtc_ice_candidate', { callId, candidate });
-        }
-      }
-      
-    } catch (error) {
-      console.error('WebRTC ICE candidate error:', error);
-      socket.emit('call_error', 'Failed to send ICE candidate');
-    }
-  });
-  
-  // Add connection state monitoring
-  socket.on('webrtc_connection_state', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, state } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) return;
-      
-      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) return;
-      
-      // Update call with connection state
-      const isCaller = call.callerId === socket.userId;
-      if (isCaller) {
-        call.callerConnectionState = state;
-      } else {
-        call.receiverConnectionState = state;
-      }
-      
-      // If connection failed, end the call
-      if (state === 'failed' || state === 'disconnected') {
-        setTimeout(() => {
-          if (activeCalls.has(callId)) {
-            endCall(callId, 'Connection lost');
-          }
-        }, 5000); // Give 5 seconds to reconnect
-      }
-      
-      console.log(`Call ${callId} - ${isCaller ? 'Caller' : 'Receiver'} connection state: ${state}`);
-      
-    } catch (error) {
-      console.error('WebRTC connection state error:', error);
     }
   });
   
@@ -1474,15 +1026,6 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
-      // End any active call between these users
-      for (const [callId, call] of activeCalls) {
-        if ((call.callerId === socket.userId && call.receiverId === targetUserId) ||
-            (call.callerId === targetUserId && call.receiverId === socket.userId)) {
-          endCall(callId, 'Call ended due to user block');
-          break;
-        }
-      }
-      
       // Delete all messages between the users immediately (including files)
       await deleteMessagesForUsers(socket.userId, targetUserId);
       
@@ -1700,12 +1243,6 @@ io.on('connection', (socket) => {
   
   socket.on('logout', async () => {
     if (socket.userId) {
-      // End any active calls for this user
-      const callId = isUserInCall(socket.userId);
-      if (callId) {
-        endCall(callId, 'User logged out');
-      }
-      
       // Remove all sessions for this user
       await deleteUserSessions(socket.userId);
       
@@ -1720,12 +1257,6 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
-      // End any active calls for this user
-      const callId = isUserInCall(socket.userId);
-      if (callId) {
-        endCall(callId, 'User disconnected');
-      }
-      
       activeUsers.delete(socket.userId);
     }
   });
@@ -1922,16 +1453,12 @@ app.get('/api/admin/users', async (req, res) => {
     // Add mute status to users
     const usersWithMuteStatus = users.map(user => {
       const activeMute = mutes.find(m => m.userId === user.id && m.muteEnd > Date.now());
-      const inCall = isUserInCall(user.id);
-      
       return {
         ...user,
         password: undefined, // Don't send passwords
         muted: !!activeMute,
         muteEnd: activeMute ? activeMute.muteEnd : null,
-        muteReason: activeMute ? activeMute.reason : null,
-        online: activeUsers.has(user.id),
-        inCall: !!inCall
+        muteReason: activeMute ? activeMute.reason : null
       };
     });
     
@@ -2151,15 +1678,13 @@ app.get('/api/admin/stats', async (req, res) => {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: activeMutes.length,
-      activeCalls: activeCalls.size
+      mutedUsers: activeMutes.length
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: 0,
-      activeCalls: activeCalls.size
+      mutedUsers: 0
     });
   }
 });
@@ -2173,14 +1698,6 @@ app.get('/', (req, res) => {
 setInterval(async () => {
   await cleanupOldSessions();
   await cleanupExpiredMutes();
-  
-  // Clean up expired calls (should not happen normally, but just in case)
-  const now = Date.now();
-  for (const [callId, call] of activeCalls) {
-    if (now - call.startTime > 5 * 60 * 1000) { // 5 minutes max
-      endCall(callId, 'Call timeout - cleanup');
-    }
-  }
 }, 60 * 60 * 1000); // Run every hour
 
 // Initialize and start server
@@ -2191,7 +1708,6 @@ async function start() {
     console.log(`PulseChat server running on port ${PORT}`);
     console.log(`Admin API key: ${ADMIN_API_KEY}`);
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
-    console.log(`WebRTC calling enabled with proper STUN server configuration`);
   });
 }
 
