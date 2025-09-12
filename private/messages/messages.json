@@ -64,14 +64,6 @@
     "timestamp": 1757676298370
   },
   {
-    "id": "985752a7ea60fe9704a8fda75103f3f1",
-    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
-    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
-    "content": "1757676387865-850360040.mp4",
-    "type": "video",
-    "timestamp": 1757676387867
-  },
-  {
     "id": "2221a4f5e33cd06fb08511af89e80859",
     "senderId": "8dc2c0df3793f494fd677f880ecfe237",
     "receiverId": "b2f37103125da81537624562314ec70c",
@@ -86,14 +78,6 @@
     "content": "I just added full mobile support",
     "type": "text",
     "timestamp": 1757676418199
-  },
-  {
-    "id": "ea23af7053a270f65d20ee6c6c40b107",
-    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
-    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
-    "content": "1757676762309-824924372.mp4",
-    "type": "video",
-    "timestamp": 1757676762313
   },
   {
     "id": "6ad6daca3730a938fbc3b61bcab1bbba",
@@ -470,5 +454,557 @@
     "content": "okay bis dann",
     "type": "text",
     "timestamp": 1757677732717
+  },
+  {
+    "id": "c6992b8d48504c6989f5f94fd32deb58",
+    "senderId": "132531116ffdadeef36522f2488f7ba9",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "Hey",
+    "type": "text",
+    "timestamp": 1757677933390
+  },
+  {
+    "id": "7fd5bafb14fd0cc3298fabafb7ceedd2",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "132531116ffdadeef36522f2488f7ba9",
+    "content": "Hey",
+    "type": "text",
+    "timestamp": 1757677981661
+  },
+  {
+    "id": "e5ba4d474be00ec36bf769c8f6224f29",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "132531116ffdadeef36522f2488f7ba9",
+    "content": "Wth",
+    "type": "text",
+    "timestamp": 1757678176911
+  },
+  {
+    "id": "16402e50d4bbf406420402409ff38143",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "nigga",
+    "type": "text",
+    "timestamp": 1757683536027
+  },
+  {
+    "id": "b5f3464812032eee945e219c5b688e3e",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "XD",
+    "type": "text",
+    "timestamp": 1757683578830
+  },
+  {
+    "id": "d08eedfe852de1996d85a91dca19063b",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "67, 67, 67, 67, 67, 67, 67, 67,",
+    "type": "text",
+    "timestamp": 1757683625071
+  },
+  {
+    "id": "a188b67d6d9775fed4bbb11452fba377",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "sigma",
+    "type": "text",
+    "timestamp": 1757683648684
+  },
+  {
+    "id": "21777019f558a9e4817e868e70c94414",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "XD",
+    "type": "text",
+    "timestamp": 1757683653950
+  },
+  {
+    "id": "83ddc215fc5a7fc8fde48d78cd744c99",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "bro kann keine bilder hochladen:(",
+    "type": "text",
+    "timestamp": 1757683666766
+  },
+  {
+    "id": "7aede79cab770b393789e2606a8c0262",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "crazy jumpscare am ende lol",
+    "type": "text",
+    "timestamp": 1757683675030
+  },
+  {
+    "id": "2d62080cb026d1b8e1b0768bad2b52db",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "wie nix bilder",
+    "type": "text",
+    "timestamp": 1757683683287
+  },
+  {
+    "id": "e69f8f52c7d28342b7256b3a9d013694",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "soll ich sticker hinzufügen?",
+    "type": "text",
+    "timestamp": 1757683684907
+  },
+  {
+    "id": "3f6398fa0820d5ae13b34de59546e879",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "save",
+    "type": "text",
+    "timestamp": 1757683688545
+  },
+  {
+    "id": "da1fd58a6309008243ba1447732ba765",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "eig schon sigma die sache hier",
+    "type": "text",
+    "timestamp": 1757683711849
+  },
+  {
+    "id": "5e3d6bda62c037afdfd02462bc7236c9",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "save",
+    "type": "text",
+    "timestamp": 1757683727529
+  },
+  {
+    "id": "b3879c15c2a859766e7206e384a0750a",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "für nen tag",
+    "type": "text",
+    "timestamp": 1757683737078
+  },
+  {
+    "id": "4003bc4766d9a3018e90f4ecf3288919",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "nd schlecht",
+    "type": "text",
+    "timestamp": 1757683740715
+  },
+  {
+    "id": "5f35fb9d39fa118635a254a416b20ff7",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "911 war gefaked",
+    "type": "text",
+    "timestamp": 1757683741267
+  },
+  {
+    "id": "51a07fd32cee58425726380743a6109a",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "save",
+    "type": "text",
+    "timestamp": 1757683745445
+  },
+  {
+    "id": "529fe10405759ba69d322ab2b91ddc40",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "holocaust gabs nie",
+    "type": "text",
+    "timestamp": 1757683757991
+  },
+  {
+    "id": "c8992a08a5c0f5207a52cf30f41acf30",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "israel ist scheiße #kill all jews",
+    "type": "text",
+    "timestamp": 1757683761193
+  },
+  {
+    "id": "51f0ec8766fc58322a440c7a9dc4d862",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "real",
+    "type": "text",
+    "timestamp": 1757683765448
+  },
+  {
+    "id": "bbdb95c7904189488b4084ece2c35be5",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "real",
+    "type": "text",
+    "timestamp": 1757683769020
+  },
+  {
+    "id": "efe37e42fe98f064c7d84d1e9c4ecd76",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "jews = bad",
+    "type": "text",
+    "timestamp": 1757683781993
+  },
+  {
+    "id": "427a9511bd13a9fa0b94a38f7b3ad831",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "hitler = good",
+    "type": "text",
+    "timestamp": 1757683786416
+  },
+  {
+    "id": "bb1f95a2b31c68df239171c48695feec",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "trust",
+    "type": "text",
+    "timestamp": 1757683791072
+  },
+  {
+    "id": "957c46835922ef561a6dc1e6717de5d0",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "not all of them but always them",
+    "type": "text",
+    "timestamp": 1757683791170
+  },
+  {
+    "id": "b07d484f1a317431449afd29e6ac0ebb",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "XD",
+    "type": "text",
+    "timestamp": 1757683800138
+  },
+  {
+    "id": "d012f7c78084b4a79979aa9855b77d63",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "das schon sigma nh",
+    "type": "text",
+    "timestamp": 1757683812834
+  },
+  {
+    "id": "b688ae4933e34a8f30615204d3875339",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "gerade wenn neue eu dings kommen für chats yk",
+    "type": "text",
+    "timestamp": 1757683822176
+  },
+  {
+    "id": "fa1c59d3d4b5189d27f449b9994b94b8",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "ja das hier ist halt nd überwacht",
+    "type": "text",
+    "timestamp": 1757683848040
+  },
+  {
+    "id": "71f63c9027c6bc64be0f7923bac3c524",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "eben",
+    "type": "text",
+    "timestamp": 1757683853524
+  },
+  {
+    "id": "c60029e859cab981dc92d70a0dac6d0e",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "das ist einfach sicher so",
+    "type": "text",
+    "timestamp": 1757683860018
+  },
+  {
+    "id": "cc74484a4a3865a0ea822e5179a160f9",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "ja",
+    "type": "text",
+    "timestamp": 1757683865174
+  },
+  {
+    "id": "d0e99818f1491f6cc9721495dd2f4186",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "ist aber noch sehr early stage",
+    "type": "text",
+    "timestamp": 1757683888637
+  },
+  {
+    "id": "64d722b6ef1d106b2ccf51a262895bda",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "ist trotzdem schon gut",
+    "type": "text",
+    "timestamp": 1757683901955
+  },
+  {
+    "id": "4f1f50350d83a31b02c5b4ecdcf6bad0",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "ig",
+    "type": "text",
+    "timestamp": 1757683920735
+  },
+  {
+    "id": "4fc007196d7dbe8d4e61e4d0077fd235",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "es ist funktional will aber noch deutlich mehr adden",
+    "type": "text",
+    "timestamp": 1757683930549
+  },
+  {
+    "id": "1f04a9d92b8bc98d7acc67245f99c8c6",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "crazy",
+    "type": "text",
+    "timestamp": 1757683936847
+  },
+  {
+    "id": "ce2c3d604329087af2fa166222545665",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "man kann noch nd speziel auf messages antworten, es gibt keine group chats",
+    "type": "text",
+    "timestamp": 1757683972656
+  },
+  {
+    "id": "5704292589d06feb92a76bfe222861b4",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "gc = tot",
+    "type": "text",
+    "timestamp": 1757683985563
+  },
+  {
+    "id": "297d0bfa52efe6f0d42f01736c90000c",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "true",
+    "type": "text",
+    "timestamp": 1757683989244
+  },
+  {
+    "id": "0f886161671c90b4156498ce07d3444a",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "soll ich einzel user lassen?",
+    "type": "text",
+    "timestamp": 1757683995769
+  },
+  {
+    "id": "d22e636f0d3b2a26883c426907739e10",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "gc mit paywall",
+    "type": "text",
+    "timestamp": 1757684006532
+  },
+  {
+    "id": "40f0db44c99b3ebceee855c8bd0238dd",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "XD",
+    "type": "text",
+    "timestamp": 1757684010429
+  },
+  {
+    "id": "b631048add99e74c279f6901066b3d33",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "10€ im monat lmao",
+    "type": "text",
+    "timestamp": 1757684011389
+  },
+  {
+    "id": "7b6722e06627692d5af778f78b5648fe",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "discord ahh",
+    "type": "text",
+    "timestamp": 1757684015600
+  },
+  {
+    "id": "87f4262c91a566cd39c20d0be2a0d53d",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "add vip oder so",
+    "type": "text",
+    "timestamp": 1757684026026
+  },
+  {
+    "id": "a84897aad1fb7a5a383e9167f97e2d85",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "gibts ja schon",
+    "type": "text",
+    "timestamp": 1757684033033
+  },
+  {
+    "id": "c612541a19a16ff99f6bfa1d54ce1afc",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "keine 2 sek warten dann",
+    "type": "text",
+    "timestamp": 1757684035337
+  },
+  {
+    "id": "0f5bd53383079088da7dd6df065614e4",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "kannst damit spamen so",
+    "type": "text",
+    "timestamp": 1757684038668
+  },
+  {
+    "id": "67d42cccb12c74358203bdd6fa952555",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "user tier 1, 2 ,3",
+    "type": "text",
+    "timestamp": 1757684040277
+  },
+  {
+    "id": "21f55f7d7994f30c4741d6eb83c8bdcb",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "2 kann man bilder mit hochladen und 3 aquch videos",
+    "type": "text",
+    "timestamp": 1757684049937
+  },
+  {
+    "id": "5fbd7e20699b5b7437a2d48b769e3a54",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "aso",
+    "type": "text",
+    "timestamp": 1757684058260
+  },
+  {
+    "id": "c64b1224b7188c5a1836af5f9f59f86b",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "was hab ich bitte💀",
+    "type": "text",
+    "timestamp": 1757684071623
+  },
+  {
+    "id": "c549293581fcbeb9615ab4dcbcb66402",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "User Tier\nTier 1",
+    "type": "text",
+    "timestamp": 1757684080456
+  },
+  {
+    "id": "7aac5c6a12fead94b7c2336d82ef2830",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "aso",
+    "type": "text",
+    "timestamp": 1757684083899
+  },
+  {
+    "id": "1f1f1b3e17c7acc52e110edda42b2fa5",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "keine bilder keine vids",
+    "type": "text",
+    "timestamp": 1757684094530
+  },
+  {
+    "id": "80cdc9da68ee6a3b2241a961c5f9029f",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "gib 200€ und du kanns stufe 3 haben",
+    "type": "text",
+    "timestamp": 1757684104027
+  },
+  {
+    "id": "c781aa5779ef3fc68e0775e536baf0be",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "nein spaß",
+    "type": "text",
+    "timestamp": 1757684119230
+  },
+  {
+    "id": "709dc181079f7fe7f8b408c181217b87",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "aktualisier mal die seite",
+    "type": "text",
+    "timestamp": 1757684122650
+  },
+  {
+    "id": "ca51c7127e5c98549762732468fb9d37",
+    "senderId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "user tier \"bastard\"",
+    "type": "text",
+    "timestamp": 1757684129106
+  },
+  {
+    "id": "87521f604bb27354a21e7f8f25ad4e95",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "nah",
+    "type": "text",
+    "timestamp": 1757684137850
+  },
+  {
+    "id": "ee1cee9780c3f5a45b25bb5c8dbe44d1",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "User Tier\nTier 3",
+    "type": "text",
+    "timestamp": 1757684143182
+  },
+  {
+    "id": "5423778d5b196223d9644bb052de3969",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "content": "hey",
+    "type": "text",
+    "timestamp": 1757687599262
+  },
+  {
+    "id": "74811799687a3c7908cac0c0b47f4b3f",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "content": "hallo",
+    "type": "text",
+    "timestamp": 1757687635369
+  },
+  {
+    "id": "6b3961e1cdaba200d13bab7f5093d60d",
+    "senderId": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "gr",
+    "type": "text",
+    "timestamp": 1757687649230
+  },
+  {
+    "id": "e689c9d59e1ce8d702e91f15654fb5a0",
+    "senderId": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "1757687730924-303956085.png",
+    "type": "image",
+    "timestamp": 1757687730925
+  },
+  {
+    "id": "82494cb811d681bb1a1f9331a43b38a4",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "content": "nigger",
+    "type": "text",
+    "timestamp": 1757687941689
   }
 ]

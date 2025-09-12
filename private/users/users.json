@@ -15,7 +15,7 @@
     "id": "9b4d4d9865a8387a72bbf03c3d0c61b3",
     "username": "snipztropix",
     "password": "niggernigger",
-    "tier": 1,
+    "tier": 3,
     "role": "user",
     "banned": false,
     "created": 1757621918519,
@@ -67,6 +67,30 @@
     "role": "user",
     "banned": false,
     "created": 1757677170102,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "username": "heox",
+    "password": "Niggaopsec",
+    "tier": 3,
+    "role": "admin",
+    "banned": false,
+    "created": 1757685897956,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "15da23c5e27f32008df4c41a03e1e771",
+    "username": "heox1337",
+    "password": "Niggaopsec",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757685920818,
     "settings": {
       "allowFriendRequests": true
     }

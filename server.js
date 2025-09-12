@@ -146,6 +146,26 @@ function isAdminOrOwner(user) {
   return ['admin', 'owner'].includes(user.role);
 }
 
+function isOwner(user) {
+  return user.role === 'owner';
+}
+
+// Function to check if user1 can perform admin actions on user2
+function canAdminAction(user1, user2) {
+  if (!user1 || !user2) return false;
+  
+  // Owner can do anything to anyone
+  if (user1.role === 'owner') return true;
+  
+  // Admin cannot perform actions on owner
+  if (user1.role === 'admin' && user2.role === 'owner') return false;
+  
+  // Admin can perform actions on admin, developer, and user
+  if (user1.role === 'admin' && ['admin', 'developer', 'user'].includes(user2.role)) return true;
+  
+  return false;
+}
+
 async function getUserById(userId) {
   const users = await loadJSON('private/users/users.json');
   return users.find(u => u.id === userId);
@@ -513,7 +533,12 @@ function checkMessageLimit(userId) {
   return { allowed: true };
 }
 
-function checkUploadLimit(userId, isVideo = false) {
+function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
+  // Owner has no upload limits
+  if (userRole === 'owner') {
+    return { allowed: true };
+  }
+  
   const now = Date.now();
   if (!uploadLimits.has(userId)) {
     uploadLimits.set(userId, { uploads: [], dailyUploads: [] });
@@ -716,8 +741,22 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Get the message sender to check their role
+      const messageSender = await getUserById(message.senderId);
+      
       // Check if user can delete this message
-      const canDelete = message.senderId === socket.userId || isAdminOrOwner(currentUser);
+      let canDelete = false;
+      
+      if (message.senderId === socket.userId) {
+        // Users can always delete their own messages
+        canDelete = true;
+      } else if (currentUser.role === 'owner') {
+        // Owner can delete any message
+        canDelete = true;
+      } else if (currentUser.role === 'admin' && messageSender && messageSender.role !== 'owner') {
+        // Admin can delete messages from non-owners
+        canDelete = true;
+      }
       
       if (!canDelete) {
         socket.emit('message_error', 'You do not have permission to delete this message');
@@ -1079,6 +1118,12 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if current user can perform admin actions on target user
+      if (!canAdminAction(currentUser, targetUser)) {
+        socket.emit('message_error', 'You do not have permission to mute this user');
+        return;
+      }
+      
       // Parse duration
       let muteDuration;
       switch (duration) {
@@ -1127,6 +1172,19 @@ io.on('connection', (socket) => {
       }
       
       const { userId, reason } = data;
+      const targetUser = await getUserById(userId);
+      
+      if (!targetUser) {
+        socket.emit('message_error', 'User not found');
+        return;
+      }
+      
+      // Check if current user can perform admin actions on target user
+      if (!canAdminAction(currentUser, targetUser)) {
+        socket.emit('message_error', 'You do not have permission to ban this user');
+        return;
+      }
+      
       const result = await banUser(userId, reason || 'Banned by admin');
       
       if (result.success) {
@@ -1258,12 +1316,15 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const userTier = getUserTier(user);
     const isVideo = req.file.mimetype.startsWith('video/');
     
-    if (userTier < 2) {
-      return res.status(403).json({ error: 'Insufficient tier for file uploads (Need Tier 2+)' });
-    }
-    
-    if (isVideo && userTier < 3) {
-      return res.status(403).json({ error: 'Insufficient tier for video uploads (Need Tier 3)' });
+    // Owner bypasses all tier restrictions
+    if (user.role !== 'owner') {
+      if (userTier < 2) {
+        return res.status(403).json({ error: 'Insufficient tier for file uploads (Need Tier 2+)' });
+      }
+      
+      if (isVideo && userTier < 3) {
+        return res.status(403).json({ error: 'Insufficient tier for video uploads (Need Tier 3)' });
+      }
     }
     
     // Check if user is muted
@@ -1271,8 +1332,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(403).json({ error: 'You are currently muted' });
     }
     
-    // Check upload limits
-    const limitCheck = checkUploadLimit(userId, isVideo);
+    // Check upload limits (owners bypass this)
+    const limitCheck = checkUploadLimit(userId, isVideo, user.role);
     if (!limitCheck.allowed) {
       return res.status(429).json({ error: limitCheck.reason });
     }
@@ -1453,6 +1514,15 @@ app.post('/api/admin/users/:userId/ban', async (req, res) => {
     const { userId } = req.params;
     const { reason } = req.body;
     
+    // Get target user to check if they are owner
+    const targetUser = await getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Only API can ban owners (not socket-based admin actions)
+    // This allows owners to be banned via API but not through normal admin interface
+    
     const result = await banUser(userId, reason);
     
     if (result.success) {
@@ -1488,6 +1558,13 @@ app.post('/api/admin/users/:userId/mute', async (req, res) => {
     const { userId } = req.params;
     const { duration, reason } = req.body;
     
+    // Get target user to check permissions
+    const targetUser = await getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // API can mute anyone, but let's still respect the hierarchy for consistency
     // Parse duration
     let muteDuration;
     switch (duration) {

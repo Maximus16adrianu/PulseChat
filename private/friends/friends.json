@@ -30,5 +30,13 @@
     "status": "accepted",
     "timestamp": 1757677237778,
     "acceptedAt": 1757677239143
+  },
+  {
+    "id": "f0428c22f723d4d983c81d225dca589b",
+    "user1": "8dc2c0df3793f494fd677f880ecfe237",
+    "user2": "a8aaf30c3783a10edec7cbd8b1b99478",
+    "status": "accepted",
+    "timestamp": 1757687564170,
+    "acceptedAt": 1757687592338
   }
 ]
