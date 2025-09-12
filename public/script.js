@@ -21,6 +21,7 @@ const PulseChat = {
     callTimer: null,
     callStartTime: null,
     isMuted: false,
+    rtcConfig: null, // Will be set from server
     
     // UI Elements Cache
     elements: {
@@ -136,12 +137,13 @@ const PulseChat = {
     }
 };
 
-// ===== WebRTC Configuration =====
-const RTC_CONFIG = {
+// ===== Fallback WebRTC Configuration =====
+const FALLBACK_RTC_CONFIG = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
-    ]
+    ],
+    iceCandidatePoolSize: 10
 };
 
 // ===== Tier Benefits Configuration =====
@@ -173,7 +175,11 @@ const TIER_BENEFITS = {
 
 async function initializeWebRTC() {
     try {
-        PulseChat.peerConnection = new RTCPeerConnection(RTC_CONFIG);
+        // Use server config if available, otherwise fallback
+        const rtcConfig = PulseChat.rtcConfig || FALLBACK_RTC_CONFIG;
+        console.log('Initializing WebRTC with config:', rtcConfig);
+        
+        PulseChat.peerConnection = new RTCPeerConnection(rtcConfig);
         
         // Handle incoming streams
         PulseChat.peerConnection.ontrack = (event) => {
@@ -185,6 +191,7 @@ async function initializeWebRTC() {
         // Handle ICE candidates
         PulseChat.peerConnection.onicecandidate = (event) => {
             if (event.candidate && PulseChat.currentCall) {
+                console.log('Sending ICE candidate');
                 PulseChat.socket.emit('webrtc_ice_candidate', {
                     callId: PulseChat.currentCall.callId,
                     candidate: event.candidate
@@ -194,8 +201,30 @@ async function initializeWebRTC() {
         
         // Handle connection state changes
         PulseChat.peerConnection.onconnectionstatechange = () => {
-            console.log('Connection state:', PulseChat.peerConnection.connectionState);
-            updateCallStatus(PulseChat.peerConnection.connectionState);
+            const state = PulseChat.peerConnection.connectionState;
+            console.log('Connection state changed to:', state);
+            updateCallStatus(state);
+            
+            // Send connection state to server for monitoring
+            if (PulseChat.currentCall) {
+                PulseChat.socket.emit('webrtc_connection_state', {
+                    callId: PulseChat.currentCall.callId,
+                    state: state
+                });
+            }
+        };
+        
+        // Handle ICE connection state changes
+        PulseChat.peerConnection.oniceconnectionstatechange = () => {
+            const iceState = PulseChat.peerConnection.iceConnectionState;
+            console.log('ICE connection state:', iceState);
+            
+            if (iceState === 'connected' || iceState === 'completed') {
+                updateCallStatus('connected');
+            } else if (iceState === 'failed' || iceState === 'disconnected') {
+                console.warn('ICE connection failed or disconnected');
+                updateCallStatus('disconnected');
+            }
         };
         
         return true;
@@ -207,16 +236,23 @@ async function initializeWebRTC() {
 
 async function getUserMedia() {
     try {
+        console.log('Requesting user media...');
         PulseChat.localStream = await navigator.mediaDevices.getUserMedia({ 
-            audio: true, 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }, 
             video: false 
         });
         
+        console.log('Got user media successfully');
         PulseChat.elements.localAudio.srcObject = PulseChat.localStream;
         
         // Add tracks to peer connection
         if (PulseChat.peerConnection) {
             PulseChat.localStream.getTracks().forEach(track => {
+                console.log('Adding track to peer connection:', track.kind);
                 PulseChat.peerConnection.addTrack(track, PulseChat.localStream);
             });
         }
@@ -230,15 +266,23 @@ async function getUserMedia() {
 }
 
 function cleanupWebRTC() {
+    console.log('Cleaning up WebRTC...');
+    
     // Stop local stream
     if (PulseChat.localStream) {
-        PulseChat.localStream.getTracks().forEach(track => track.stop());
+        PulseChat.localStream.getTracks().forEach(track => {
+            console.log('Stopping local track:', track.kind);
+            track.stop();
+        });
         PulseChat.localStream = null;
     }
     
     // Stop remote stream
     if (PulseChat.remoteStream) {
-        PulseChat.remoteStream.getTracks().forEach(track => track.stop());
+        PulseChat.remoteStream.getTracks().forEach(track => {
+            console.log('Stopping remote track:', track.kind);
+            track.stop();
+        });
         PulseChat.remoteStream = null;
     }
     
@@ -261,13 +305,21 @@ function updateCallStatus(status) {
     const statusElement = PulseChat.elements.callStatus;
     const statusText = status === 'connected' ? 'Connected' : 
                      status === 'connecting' ? 'Connecting...' : 
-                     status === 'disconnected' ? 'Disconnected' : 'Connecting...';
+                     status === 'ringing' ? 'Ringing...' :
+                     status === 'disconnected' ? 'Disconnected' : 
+                     status === 'failed' ? 'Connection Failed' : 'Connecting...';
     
     statusElement.textContent = statusText;
-    statusElement.className = `${status}`;
+    statusElement.className = `call-status ${status}`;
     
     if (status === 'connected' && !PulseChat.callTimer) {
         startCallTimer();
+    } else if (status === 'failed' || status === 'disconnected') {
+        setTimeout(() => {
+            if (PulseChat.currentCall) {
+                hangUpCall();
+            }
+        }, 3000); // Give 3 seconds to show the error state
     }
 }
 
@@ -331,6 +383,8 @@ async function initiateCall() {
     }
     
     try {
+        console.log('Initiating call to:', PulseChat.selectedFriend.friendUsername);
+        
         // Initialize WebRTC
         if (!await initializeWebRTC()) {
             showNotification('Failed to initialize call system', 'error');
@@ -358,6 +412,8 @@ async function acceptCall() {
     if (!PulseChat.currentCall) return;
     
     try {
+        console.log('Accepting call:', PulseChat.currentCall.callId);
+        
         // Initialize WebRTC if not already done
         if (!PulseChat.peerConnection && !await initializeWebRTC()) {
             showNotification('Failed to initialize call system', 'error');
@@ -388,6 +444,7 @@ async function acceptCall() {
 function declineCall() {
     if (!PulseChat.currentCall) return;
     
+    console.log('Declining call:', PulseChat.currentCall.callId);
     PulseChat.socket.emit('decline_call', {
         callId: PulseChat.currentCall.callId
     });
@@ -399,6 +456,7 @@ function declineCall() {
 function hangUpCall() {
     if (!PulseChat.currentCall) return;
     
+    console.log('Hanging up call:', PulseChat.currentCall.callId);
     PulseChat.socket.emit('hang_up_call', {
         callId: PulseChat.currentCall.callId
     });
@@ -416,9 +474,12 @@ function toggleMute() {
     });
     
     updateMuteButton();
+    console.log('Mute toggled:', PulseChat.isMuted);
 }
 
 function endCurrentCall() {
+    console.log('Ending current call');
+    
     // Hide call modals
     hideModal(PulseChat.elements.incomingCallModal);
     hideModal(PulseChat.elements.activeCallModal);
@@ -431,9 +492,21 @@ function endCurrentCall() {
     
     // Clear call state
     PulseChat.currentCall = null;
+    
+    // Update friend list to refresh call status
+    renderFriendsList();
+    renderMobileFriendsList();
+    
+    // Update user info if a friend is selected
+    if (PulseChat.selectedFriend) {
+        updateUserInfoPanel(PulseChat.selectedFriend);
+        updateMobileUserInfo(PulseChat.selectedFriend);
+    }
 }
 
 function showIncomingCallModal(callerUsername, callerId) {
+    console.log('Showing incoming call modal for:', callerUsername);
+    
     // Set caller info
     PulseChat.elements.incomingCallAvatar.textContent = callerUsername.charAt(0).toUpperCase();
     PulseChat.elements.incomingCallUsername.textContent = callerUsername;
@@ -446,6 +519,8 @@ function showIncomingCallModal(callerUsername, callerId) {
 }
 
 function showActiveCallModal(username, userId) {
+    console.log('Showing active call modal for:', username);
+    
     // Set user info
     PulseChat.elements.activeCallAvatar.textContent = username.charAt(0).toUpperCase();
     PulseChat.elements.activeCallUsername.textContent = username;
@@ -456,6 +531,27 @@ function showActiveCallModal(username, userId) {
     
     // Show modal
     showModal(PulseChat.elements.activeCallModal);
+}
+
+async function createAndSendOffer() {
+    try {
+        console.log('Creating and sending WebRTC offer...');
+        const offer = await PulseChat.peerConnection.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: false
+        });
+        
+        await PulseChat.peerConnection.setLocalDescription(offer);
+        console.log('Local description set, sending offer');
+        
+        PulseChat.socket.emit('webrtc_offer', {
+            callId: PulseChat.currentCall.callId,
+            offer: offer
+        });
+    } catch (error) {
+        console.error('Error creating WebRTC offer:', error);
+        hangUpCall();
+    }
 }
 
 // ===== Settings Functions =====
@@ -867,6 +963,12 @@ PulseChat.socket.on('muted', (data) => {
     showNotification(`You have been muted for ${data.duration}. Reason: ${data.reason}`, 'error');
 });
 
+// WebRTC Configuration Event - THIS WAS MISSING!
+PulseChat.socket.on('webrtc_config', (config) => {
+    console.log('Received WebRTC config from server:', config);
+    PulseChat.rtcConfig = config;
+});
+
 // Friends Events
 PulseChat.socket.on('friends_list', (friendsList) => {
     PulseChat.friends = friendsList;
@@ -898,10 +1000,19 @@ PulseChat.socket.on('friend_request_accepted', (data) => {
 
 // WebRTC Call Events
 PulseChat.socket.on('incoming_call', (data) => {
+    console.log('Incoming call from:', data.callerUsername);
+    
     if (PulseChat.currentCall) {
         // Already in a call, auto-decline
+        console.log('Already in call, declining');
         PulseChat.socket.emit('decline_call', { callId: data.callId });
         return;
+    }
+    
+    // Store WebRTC config if provided
+    if (data.webrtcConfig) {
+        console.log('Received WebRTC config with call');
+        PulseChat.rtcConfig = data.webrtcConfig;
     }
     
     PulseChat.currentCall = {
@@ -915,6 +1026,14 @@ PulseChat.socket.on('incoming_call', (data) => {
 });
 
 PulseChat.socket.on('call_initiated', (data) => {
+    console.log('Call initiated to:', data.receiverUsername);
+    
+    // Store WebRTC config if provided
+    if (data.webrtcConfig) {
+        console.log('Received WebRTC config with call initiation');
+        PulseChat.rtcConfig = data.webrtcConfig;
+    }
+    
     PulseChat.currentCall = {
         callId: data.callId,
         receiverId: data.receiverId,
@@ -927,33 +1046,56 @@ PulseChat.socket.on('call_initiated', (data) => {
 });
 
 PulseChat.socket.on('call_accepted', (data) => {
+    console.log('Call accepted:', data.callId);
+    
     if (PulseChat.currentCall && PulseChat.currentCall.callId === data.callId) {
+        // Store WebRTC config if provided
+        if (data.webrtcConfig) {
+            console.log('Received WebRTC config with call acceptance');
+            PulseChat.rtcConfig = data.webrtcConfig;
+        }
+        
         updateCallStatus('connecting');
         
         // If we're the caller, create and send offer
         if (PulseChat.currentCall.type === 'outgoing') {
-            createAndSendOffer();
+            console.log('We are caller, creating offer...');
+            setTimeout(() => createAndSendOffer(), 500); // Small delay to ensure connection is ready
         }
     }
 });
 
 PulseChat.socket.on('call_declined', (data) => {
+    console.log('Call declined');
     showNotification('Call was declined', 'info');
     endCurrentCall();
 });
 
 PulseChat.socket.on('call_ended', (data) => {
+    console.log('Call ended:', data.reason);
     showNotification(data.reason || 'Call ended', 'info');
     endCurrentCall();
 });
 
 PulseChat.socket.on('webrtc_offer', async (data) => {
+    console.log('Received WebRTC offer');
+    
     if (PulseChat.currentCall && PulseChat.currentCall.callId === data.callId) {
         try {
+            // Store WebRTC config if provided
+            if (data.webrtcConfig) {
+                console.log('Received WebRTC config with offer');
+                PulseChat.rtcConfig = data.webrtcConfig;
+            }
+            
+            console.log('Setting remote description...');
             await PulseChat.peerConnection.setRemoteDescription(data.offer);
+            
+            console.log('Creating answer...');
             const answer = await PulseChat.peerConnection.createAnswer();
             await PulseChat.peerConnection.setLocalDescription(answer);
             
+            console.log('Sending answer...');
             PulseChat.socket.emit('webrtc_answer', {
                 callId: data.callId,
                 answer: answer
@@ -966,8 +1108,17 @@ PulseChat.socket.on('webrtc_offer', async (data) => {
 });
 
 PulseChat.socket.on('webrtc_answer', async (data) => {
+    console.log('Received WebRTC answer');
+    
     if (PulseChat.currentCall && PulseChat.currentCall.callId === data.callId) {
         try {
+            // Store WebRTC config if provided
+            if (data.webrtcConfig) {
+                console.log('Received WebRTC config with answer');
+                PulseChat.rtcConfig = data.webrtcConfig;
+            }
+            
+            console.log('Setting remote description from answer...');
             await PulseChat.peerConnection.setRemoteDescription(data.answer);
         } catch (error) {
             console.error('Error handling WebRTC answer:', error);
@@ -977,34 +1128,24 @@ PulseChat.socket.on('webrtc_answer', async (data) => {
 });
 
 PulseChat.socket.on('webrtc_ice_candidate', async (data) => {
+    console.log('Received ICE candidate');
+    
     if (PulseChat.currentCall && PulseChat.currentCall.callId === data.callId) {
         try {
+            console.log('Adding ICE candidate...');
             await PulseChat.peerConnection.addIceCandidate(data.candidate);
         } catch (error) {
             console.error('Error adding ICE candidate:', error);
+            // Don't hang up for ICE candidate errors, just log them
         }
     }
 });
 
 PulseChat.socket.on('call_error', (message) => {
+    console.error('Call error:', message);
     showNotification(message, 'error');
     endCurrentCall();
 });
-
-async function createAndSendOffer() {
-    try {
-        const offer = await PulseChat.peerConnection.createOffer();
-        await PulseChat.peerConnection.setLocalDescription(offer);
-        
-        PulseChat.socket.emit('webrtc_offer', {
-            callId: PulseChat.currentCall.callId,
-            offer: offer
-        });
-    } catch (error) {
-        console.error('Error creating WebRTC offer:', error);
-        hangUpCall();
-    }
-}
 
 // Message Events
 PulseChat.socket.on('messages_loaded', (data) => {
