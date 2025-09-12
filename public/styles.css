@@ -65,6 +65,7 @@
   --sidebar-width: 320px;
   --user-panel-width: 300px;
   --header-height: 80px;
+  --mobile-bottom-padding: 20px;
 }
 
 /* ===== Reset & Base ===== */
@@ -74,6 +75,11 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, var(--bg-primary) 0%, #0a0a14 100%);
@@ -81,6 +87,9 @@ body {
   line-height: 1.6;
   overflow: hidden;
   height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height for better mobile support */
+  position: fixed;
+  width: 100%;
 }
 
 /* ===== Scrollbar ===== */
@@ -547,6 +556,7 @@ body {
   left: 0;
   width: min(350px, 85vw);
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   overflow-y: auto;
@@ -654,6 +664,7 @@ body {
 .mobile-friends-list {
   padding: var(--space-4);
   max-height: 60vh;
+  max-height: 60dvh;
   overflow-y: auto;
 }
 
@@ -757,6 +768,7 @@ body {
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
   box-shadow: var(--shadow-xl);
   backdrop-filter: blur(20px);
@@ -883,7 +895,9 @@ body {
 .app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  position: relative;
 }
 
 /* Sidebar */
@@ -1107,6 +1121,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 /* Header */
@@ -1119,6 +1134,7 @@ body {
   justify-content: space-between;
   padding: 0 var(--space-6);
   backdrop-filter: blur(10px);
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -1161,6 +1177,7 @@ body {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* Messages Area */
@@ -1169,6 +1186,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .messages-container {
@@ -1178,6 +1196,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-height: 0;
 }
 
 /* Messages */
@@ -1275,6 +1294,7 @@ body {
   padding: var(--space-6);
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .input-container {
@@ -1625,12 +1645,30 @@ body {
     display: none !important;
   }
   
-  /* Make main content full width */
+  /* Main Content Full Width Mobile */
   .main-content {
     width: 100%;
+    height: 100vh;
+    height: 100dvh;
   }
   
-  /* Adjust header for mobile */
+  /* Mobile App Container */
+  .app-container {
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  
+  /* Mobile Header */
+  .app-header {
+    height: var(--header-height);
+    flex-shrink: 0;
+  }
+  
   .header-left h1 {
     font-size: 1.125rem;
   }
@@ -1643,18 +1681,37 @@ body {
     gap: var(--space-1);
   }
   
-  /* Modal adjustments for mobile */
-  .modal-content {
-    margin: var(--space-4);
-    width: auto;
-    max-width: none;
-    max-height: calc(100vh - 2rem);
+  /* Mobile Chat Container */
+  .chat-container {
+    flex: 1;
+    min-height: 0;
+    height: calc(100vh - var(--header-height));
+    height: calc(100dvh - var(--header-height));
   }
   
-  /* Mobile input area - Fixed 20px bottom padding */
+  /* Mobile Messages Area */
+  .messages-area {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Mobile Messages Container - This should shrink */
+  .messages-container {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-4);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Mobile Message Input Area - Fixed at bottom */
   .message-input-area {
     padding: var(--space-3) var(--space-4);
-    padding-bottom: 20px;
+    padding-bottom: calc(var(--mobile-bottom-padding) + env(safe-area-inset-bottom, 0px));
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
   }
   
   .input-container {
@@ -1665,15 +1722,17 @@ body {
     font-size: 16px; /* Prevent zoom on iOS */
   }
   
-  /* Make messages more compact on mobile */
-  .messages-container {
-    padding: var(--space-4);
-    /* Add bottom padding to ensure messages aren't hidden behind input */
-    padding-bottom: calc(var(--space-4) + 20px);
-  }
-  
   .message {
     max-width: 85%;
+  }
+  
+  /* Modal adjustments for mobile */
+  .modal-content {
+    margin: var(--space-4);
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
   }
   
   /* Notification adjustments */
@@ -1710,6 +1769,11 @@ body {
   /* Compact header */
   .app-header {
     padding: 0 var(--space-4);
+    height: 60px; /* Smaller header on small screens */
+  }
+  
+  :root {
+    --header-height: 60px;
   }
   
   .header-left h1 {
@@ -1752,5 +1816,78 @@ body {
     width: 32px;
     height: 32px;
     font-size: 1rem;
+  }
+  
+  /* Increase mobile bottom padding for smaller screens */
+  .message-input-area {
+    padding-bottom: calc(25px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Additional mobile-specific fixes */
+@media (max-width: 768px) {
+  /* Ensure proper viewport handling */
+  body {
+    position: fixed;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+  }
+  
+  /* Prevent body scroll */
+  body.modal-open {
+    overflow: hidden;
+  }
+  
+  /* Improve touch scrolling */
+  .messages-container,
+  .friends-list,
+  .mobile-friends-list {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Ensure input area is always visible */
+  .message-input-area {
+    position: relative;
+    z-index: 10;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+/* Fix for devices with notches/safe areas */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 768px) {
+    .message-input-area {
+      padding-bottom: calc(var(--mobile-bottom-padding) + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* Fix for landscape orientation on mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .app-header {
+    height: 50px;
+  }
+  
+  :root {
+    --header-height: 50px;
+  }
+  
+  .header-left h1 {
+    font-size: 0.9rem;
+  }
+  
+  .messages-container {
+    padding: var(--space-3);
+  }
+  
+  .message-input-area {
+    padding: var(--space-2) var(--space-4);
+    padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
   }
 }
