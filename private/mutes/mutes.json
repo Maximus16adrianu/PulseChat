@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "userId": "132531116ffdadeef36522f2488f7ba9",
+    "muteEnd": 1757717863867,
+    "reason": "Muted by admin via admin panel",
+    "adminMute": true,
+    "created": 1757714263867
+  }
+]

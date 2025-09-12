@@ -152,6 +152,23 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes callPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
 /* ===== Components ===== */
 
 /* Buttons */
@@ -256,6 +273,84 @@ body {
   background: var(--danger-500);
   color: white;
   border-color: var(--danger-500);
+}
+
+/* Call Buttons */
+.call-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.call-btn.ringing {
+  animation: callPulse 2s infinite;
+}
+
+.accept-call-btn {
+  background: linear-gradient(135deg, var(--success-500) 0%, var(--success-600) 100%);
+  color: white;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-full);
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+}
+
+.accept-call-btn:hover {
+  background: linear-gradient(135deg, var(--success-600) 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-xl);
+}
+
+.decline-call-btn {
+  background: linear-gradient(135deg, var(--danger-500) 0%, var(--danger-600) 100%);
+  color: white;
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-full);
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+}
+
+.decline-call-btn:hover {
+  background: linear-gradient(135deg, var(--danger-600) 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-xl);
+}
+
+.hang-up-btn {
+  background: linear-gradient(135deg, var(--danger-500) 0%, var(--danger-600) 100%);
+  color: white;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+}
+
+.hang-up-btn:hover {
+  background: linear-gradient(135deg, var(--danger-600) 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  animation: shake 0.5s ease-in-out;
+}
+
+.mute-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-full);
+  font-weight: 600;
+}
+
+.mute-btn:hover {
+  background: var(--bg-accent);
+  border-color: var(--border-color-hover);
+  transform: translateY(-2px);
+}
+
+.mute-btn.muted {
+  background: linear-gradient(135deg, var(--warning-500) 0%, var(--warning-600) 100%);
+  color: white;
+  border-color: var(--warning-500);
 }
 
 /* Mobile Menu Button */
@@ -428,6 +523,152 @@ body {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
+}
+
+/* ===== Call Modals ===== */
+.call-modal {
+  z-index: 2000;
+}
+
+.call-backdrop {
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(20px);
+}
+
+.call-modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(20px);
+  animation: slideUp var(--transition-normal);
+  text-align: center;
+}
+
+/* Incoming Call Modal */
+.incoming-call-header {
+  margin-bottom: var(--space-8);
+}
+
+.incoming-call-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.incoming-call-header p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Active Call Modal */
+.active-call-header {
+  margin-bottom: var(--space-8);
+}
+
+.active-call-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.active-call-header p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: var(--space-3);
+}
+
+/* Call Avatar */
+.call-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+  margin: 0 auto;
+  box-shadow: var(--shadow-xl);
+  position: relative;
+  border: 4px solid var(--bg-secondary);
+}
+
+.call-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-full);
+  z-index: -1;
+  opacity: 0.3;
+  animation: pulse 2s infinite;
+}
+
+.call-avatar.ringing::after {
+  animation: callPulse 2s infinite;
+}
+
+/* Call Timer */
+.call-timer {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--primary-500);
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  display: inline-block;
+  margin-top: var(--space-3);
+}
+
+/* Call Controls */
+.call-controls {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* Call Status */
+#callStatus {
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  display: inline-block;
+}
+
+#callStatus.connecting {
+  background: var(--warning-500);
+  color: white;
+}
+
+#callStatus.connected {
+  background: var(--success-500);
+  color: white;
+}
+
+#callStatus.ringing {
+  background: var(--primary-500);
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+/* Audio Elements */
+#localAudio,
+#remoteAudio {
+  display: none;
 }
 
 /* ===== Mobile User Header ===== */
@@ -2027,6 +2268,29 @@ body {
     max-width: 85%;
   }
   
+  /* Mobile Call Modals */
+  .call-modal-content {
+    margin: var(--space-4);
+    width: auto;
+    max-width: none;
+  }
+  
+  .call-controls {
+    gap: var(--space-3);
+  }
+  
+  .accept-call-btn,
+  .decline-call-btn {
+    padding: var(--space-3) var(--space-5);
+    font-size: 0.875rem;
+  }
+  
+  .hang-up-btn,
+  .mute-btn {
+    padding: var(--space-2) var(--space-4);
+    font-size: 0.875rem;
+  }
+  
   /* Modal adjustments for mobile */
   .modal-content {
     margin: var(--space-4);
@@ -2169,6 +2433,38 @@ body {
   .mobile-header-avatar {
     width: 32px;
     height: 32px;
+    font-size: 1rem;
+  }
+  
+  /* Compact call modals */
+  .call-modal-content {
+    padding: var(--space-6);
+    margin: var(--space-2);
+  }
+  
+  .call-avatar {
+    width: 80px;
+    height: 80px;
+    font-size: 2rem;
+  }
+  
+  .call-controls {
+    gap: var(--space-2);
+  }
+  
+  .accept-call-btn,
+  .decline-call-btn {
+    padding: var(--space-2) var(--space-4);
+    font-size: 0.8rem;
+  }
+  
+  .hang-up-btn,
+  .mute-btn {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.8rem;
+  }
+  
+  .call-timer {
     font-size: 1rem;
   }
   

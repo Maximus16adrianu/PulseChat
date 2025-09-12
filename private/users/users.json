@@ -94,5 +94,17 @@
     "settings": {
       "allowFriendRequests": true
     }
+  },
+  {
+    "id": "880b3a63395e010c732ed15fb9cb6112",
+    "username": "Paul",
+    "password": "Paul",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757716797568,
+    "settings": {
+      "allowFriendRequests": true
+    }
   }
 ]

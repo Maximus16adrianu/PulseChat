@@ -21,6 +21,7 @@ const FIRST_MUTE_DURATION = 60 * 1000; // 1 minute
 const ESCALATED_MUTE_DURATION = 60 * 60 * 1000; // 1 hour
 const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
+const CALL_TIMEOUT = 60 * 1000; // 60 seconds for call to be answered
 
 // Middleware
 app.use(express.json());
@@ -50,6 +51,7 @@ const activeUsers = new Map();
 const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
+const activeCalls = new Map(); // Track ongoing calls
 
 // Ensure directories exist
 async function initializeDirectories() {
@@ -134,6 +136,10 @@ function generateUserId() {
 
 function generateSessionToken() {
   return crypto.randomBytes(32).toString('hex');
+}
+
+function generateCallId() {
+  return crypto.randomBytes(8).toString('hex');
 }
 
 function getUserTier(user) {
@@ -398,6 +404,44 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
+// Call management functions
+function isUserInCall(userId) {
+  for (const [callId, call] of activeCalls) {
+    if (call.callerId === userId || call.receiverId === userId) {
+      return callId;
+    }
+  }
+  return null;
+}
+
+function endCall(callId, reason = 'Call ended') {
+  const call = activeCalls.get(callId);
+  if (!call) return false;
+  
+  // Clear timeout if exists
+  if (call.timeout) {
+    clearTimeout(call.timeout);
+  }
+  
+  // Notify both participants
+  const callerSocket = getSocketByUserId(call.callerId);
+  const receiverSocket = getSocketByUserId(call.receiverId);
+  
+  if (callerSocket) {
+    callerSocket.emit('call_ended', { callId, reason });
+  }
+  
+  if (receiverSocket) {
+    receiverSocket.emit('call_ended', { callId, reason });
+  }
+  
+  // Remove from active calls
+  activeCalls.delete(callId);
+  
+  console.log(`Call ${callId} ended: ${reason}`);
+  return true;
+}
+
 // Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
@@ -412,13 +456,20 @@ async function sendUpdatedUserLists(socket, userId) {
       userFriends.map(async (friendship) => {
         const friendId = friendship.user1 === userId ? friendship.user2 : friendship.user1;
         const friendUser = await getUserById(friendId);
+        
+        // Check if friend is online and in a call
+        const friendOnline = activeUsers.has(friendId);
+        const friendInCall = isUserInCall(friendId);
+        
         return {
           ...friendship,
           friendId,
           friendUsername: friendUser ? friendUser.username : 'Unknown User',
           friendRole: friendUser ? friendUser.role : 'user',
           friendTier: friendUser ? getUserTier(friendUser) : 1,
-          friendsSince: friendship.acceptedAt || friendship.timestamp
+          friendsSince: friendship.acceptedAt || friendship.timestamp,
+          online: friendOnline,
+          inCall: !!friendInCall
         };
       })
     );
@@ -640,24 +691,31 @@ io.on('connection', (socket) => {
       socket.userId = user.id;
       socket.emit('authenticated', { user: { ...user, password: undefined } });
       
-      // Load and send friends list with full user details
+      // Load and send friends list with full user details (including call status)
       const friends = await loadJSON('private/friends/friends.json');
       const userFriends = friends.filter(f => 
         (f.user1 === user.id || f.user2 === user.id) && f.status === 'accepted'
       );
       
-      // Populate friend details
+      // Populate friend details with call status
       const friendsWithDetails = await Promise.all(
         userFriends.map(async (friendship) => {
           const friendId = friendship.user1 === user.id ? friendship.user2 : friendship.user1;
           const friendUser = await getUserById(friendId);
+          
+          // Check if friend is online and in a call
+          const friendOnline = activeUsers.has(friendId);
+          const friendInCall = isUserInCall(friendId);
+          
           return {
             ...friendship,
             friendId,
             friendUsername: friendUser ? friendUser.username : 'Unknown User',
             friendRole: friendUser ? friendUser.role : 'user',
             friendTier: friendUser ? getUserTier(friendUser) : 1,
-            friendsSince: friendship.acceptedAt || friendship.timestamp
+            friendsSince: friendship.acceptedAt || friendship.timestamp,
+            online: friendOnline,
+            inCall: !!friendInCall
           };
         })
       );
@@ -700,9 +758,301 @@ io.on('connection', (socket) => {
       socket.emit('friend_requests', requestsWithSenders);
       socket.emit('blocked_users', blockedUsersWithDetails);
       
+      // Check if user was in a call before disconnecting
+      const existingCallId = isUserInCall(user.id);
+      if (existingCallId) {
+        const call = activeCalls.get(existingCallId);
+        if (call) {
+          socket.emit('call_reconnected', {
+            callId: existingCallId,
+            otherUserId: call.callerId === user.id ? call.receiverId : call.callerId,
+            status: call.status
+          });
+        }
+      }
+      
     } catch (error) {
       console.error('Authentication error:', error);
       socket.emit('auth_error', 'Server error');
+    }
+  });
+  
+  // WebRTC Calling Events
+  socket.on('initiate_call', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { receiverId } = data;
+      const caller = await getUserById(socket.userId);
+      const receiver = await getUserById(receiverId);
+      
+      if (!caller || !receiver) {
+        socket.emit('call_error', 'User not found');
+        return;
+      }
+      
+      // Calls are available to all users (no tier restriction)
+      
+      // Check if they are friends
+      const friendship = await getFriendshipDetails(socket.userId, receiverId);
+      if (!friendship) {
+        socket.emit('call_error', 'Can only call friends');
+        return;
+      }
+      
+      // Check if receiver is online
+      const receiverSocket = getSocketByUserId(receiverId);
+      if (!receiverSocket) {
+        socket.emit('call_error', 'User is not online');
+        return;
+      }
+      
+      // Check if either user is already in a call
+      const callerInCall = isUserInCall(socket.userId);
+      const receiverInCall = isUserInCall(receiverId);
+      
+      if (callerInCall) {
+        socket.emit('call_error', 'You are already in a call');
+        return;
+      }
+      
+      if (receiverInCall) {
+        socket.emit('call_error', 'User is already in a call');
+        return;
+      }
+      
+      // Create call record
+      const callId = generateCallId();
+      const call = {
+        callId,
+        callerId: socket.userId,
+        receiverId,
+        status: 'ringing',
+        startTime: Date.now(),
+        timeout: null
+      };
+      
+      // Set timeout for call
+      call.timeout = setTimeout(() => {
+        endCall(callId, 'Call timeout - no answer');
+      }, CALL_TIMEOUT);
+      
+      activeCalls.set(callId, call);
+      
+      // Notify receiver
+      receiverSocket.emit('incoming_call', {
+        callId,
+        callerId: socket.userId,
+        callerUsername: caller.username
+      });
+      
+      // Notify caller
+      socket.emit('call_initiated', {
+        callId,
+        receiverId,
+        receiverUsername: receiver.username
+      });
+      
+      console.log(`Call initiated: ${caller.username} -> ${receiver.username} (${callId})`);
+      
+    } catch (error) {
+      console.error('Initiate call error:', error);
+      socket.emit('call_error', 'Failed to initiate call');
+    }
+  });
+  
+  socket.on('accept_call', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.receiverId !== socket.userId) {
+        socket.emit('call_error', 'Not authorized to accept this call');
+        return;
+      }
+      
+      if (call.status !== 'ringing') {
+        socket.emit('call_error', 'Call is no longer ringing');
+        return;
+      }
+      
+      // Clear timeout
+      if (call.timeout) {
+        clearTimeout(call.timeout);
+        call.timeout = null;
+      }
+      
+      // Update call status
+      call.status = 'connecting';
+      call.acceptTime = Date.now();
+      
+      // Notify both participants
+      const callerSocket = getSocketByUserId(call.callerId);
+      
+      if (callerSocket) {
+        callerSocket.emit('call_accepted', { callId });
+      }
+      
+      socket.emit('call_accepted', { callId });
+      
+      console.log(`Call accepted: ${callId}`);
+      
+    } catch (error) {
+      console.error('Accept call error:', error);
+      socket.emit('call_error', 'Failed to accept call');
+    }
+  });
+  
+  socket.on('decline_call', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.receiverId !== socket.userId) {
+        socket.emit('call_error', 'Not authorized to decline this call');
+        return;
+      }
+      
+      endCall(callId, 'Call declined');
+      
+    } catch (error) {
+      console.error('Decline call error:', error);
+      socket.emit('call_error', 'Failed to decline call');
+    }
+  });
+  
+  socket.on('hang_up_call', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) {
+        socket.emit('call_error', 'Not authorized to hang up this call');
+        return;
+      }
+      
+      endCall(callId, 'Call ended by user');
+      
+    } catch (error) {
+      console.error('Hang up call error:', error);
+      socket.emit('call_error', 'Failed to hang up call');
+    }
+  });
+  
+  // WebRTC signaling events
+  socket.on('webrtc_offer', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId, offer } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.callerId !== socket.userId) {
+        socket.emit('call_error', 'Only caller can send offer');
+        return;
+      }
+      
+      // Forward offer to receiver
+      const receiverSocket = getSocketByUserId(call.receiverId);
+      if (receiverSocket) {
+        receiverSocket.emit('webrtc_offer', { callId, offer });
+      }
+      
+    } catch (error) {
+      console.error('WebRTC offer error:', error);
+      socket.emit('call_error', 'Failed to send offer');
+    }
+  });
+  
+  socket.on('webrtc_answer', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId, answer } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.receiverId !== socket.userId) {
+        socket.emit('call_error', 'Only receiver can send answer');
+        return;
+      }
+      
+      // Update call status to connected
+      call.status = 'connected';
+      call.connectTime = Date.now();
+      
+      // Forward answer to caller
+      const callerSocket = getSocketByUserId(call.callerId);
+      if (callerSocket) {
+        callerSocket.emit('webrtc_answer', { callId, answer });
+      }
+      
+      console.log(`Call connected: ${callId}`);
+      
+    } catch (error) {
+      console.error('WebRTC answer error:', error);
+      socket.emit('call_error', 'Failed to send answer');
+    }
+  });
+  
+  socket.on('webrtc_ice_candidate', async (data) => {
+    try {
+      if (!socket.userId) return;
+      
+      const { callId, candidate } = data;
+      const call = activeCalls.get(callId);
+      
+      if (!call) {
+        socket.emit('call_error', 'Call not found');
+        return;
+      }
+      
+      if (call.callerId !== socket.userId && call.receiverId !== socket.userId) {
+        socket.emit('call_error', 'Not authorized for this call');
+        return;
+      }
+      
+      // Forward ICE candidate to the other participant
+      const otherUserId = call.callerId === socket.userId ? call.receiverId : call.callerId;
+      const otherSocket = getSocketByUserId(otherUserId);
+      
+      if (otherSocket) {
+        otherSocket.emit('webrtc_ice_candidate', { callId, candidate });
+      }
+      
+    } catch (error) {
+      console.error('WebRTC ICE candidate error:', error);
+      socket.emit('call_error', 'Failed to send ICE candidate');
     }
   });
   
@@ -1026,6 +1376,15 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
+      // End any active call between these users
+      for (const [callId, call] of activeCalls) {
+        if ((call.callerId === socket.userId && call.receiverId === targetUserId) ||
+            (call.callerId === targetUserId && call.receiverId === socket.userId)) {
+          endCall(callId, 'Call ended due to user block');
+          break;
+        }
+      }
+      
       // Delete all messages between the users immediately (including files)
       await deleteMessagesForUsers(socket.userId, targetUserId);
       
@@ -1243,6 +1602,12 @@ io.on('connection', (socket) => {
   
   socket.on('logout', async () => {
     if (socket.userId) {
+      // End any active calls for this user
+      const callId = isUserInCall(socket.userId);
+      if (callId) {
+        endCall(callId, 'User logged out');
+      }
+      
       // Remove all sessions for this user
       await deleteUserSessions(socket.userId);
       
@@ -1257,6 +1622,12 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
+      // End any active calls for this user
+      const callId = isUserInCall(socket.userId);
+      if (callId) {
+        endCall(callId, 'User disconnected');
+      }
+      
       activeUsers.delete(socket.userId);
     }
   });
@@ -1453,12 +1824,16 @@ app.get('/api/admin/users', async (req, res) => {
     // Add mute status to users
     const usersWithMuteStatus = users.map(user => {
       const activeMute = mutes.find(m => m.userId === user.id && m.muteEnd > Date.now());
+      const inCall = isUserInCall(user.id);
+      
       return {
         ...user,
         password: undefined, // Don't send passwords
         muted: !!activeMute,
         muteEnd: activeMute ? activeMute.muteEnd : null,
-        muteReason: activeMute ? activeMute.reason : null
+        muteReason: activeMute ? activeMute.reason : null,
+        online: activeUsers.has(user.id),
+        inCall: !!inCall
       };
     });
     
@@ -1678,13 +2053,15 @@ app.get('/api/admin/stats', async (req, res) => {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: activeMutes.length
+      mutedUsers: activeMutes.length,
+      activeCalls: activeCalls.size
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: 0
+      mutedUsers: 0,
+      activeCalls: activeCalls.size
     });
   }
 });
@@ -1698,6 +2075,14 @@ app.get('/', (req, res) => {
 setInterval(async () => {
   await cleanupOldSessions();
   await cleanupExpiredMutes();
+  
+  // Clean up expired calls (should not happen normally, but just in case)
+  const now = Date.now();
+  for (const [callId, call] of activeCalls) {
+    if (now - call.startTime > 5 * 60 * 1000) { // 5 minutes max
+      endCall(callId, 'Call timeout - cleanup');
+    }
+  }
 }, 60 * 60 * 1000); // Run every hour
 
 // Initialize and start server
@@ -1708,6 +2093,7 @@ async function start() {
     console.log(`PulseChat server running on port ${PORT}`);
     console.log(`Admin API key: ${ADMIN_API_KEY}`);
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
+    console.log(`WebRTC calling enabled with P2P connections`);
   });
 }
 
