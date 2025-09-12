@@ -34,5 +34,17 @@
     "settings": {
       "allowFriendRequests": true
     }
+  },
+  {
+    "id": "b2f37103125da81537624562314ec70c",
+    "username": "X4ndra._s0ul",
+    "password": "Ana._.Password",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757638477347,
+    "settings": {
+      "allowFriendRequests": true
+    }
   }
 ]

@@ -397,6 +397,129 @@ body {
   color: var(--gray-900);
 }
 
+/* ===== Mobile User Header ===== */
+.mobile-user-header {
+  display: none;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-left: var(--space-3);
+  flex: 1;
+  max-width: 300px;
+}
+
+.mobile-user-header:hover {
+  background: var(--bg-accent);
+  border-color: var(--border-color-hover);
+  transform: translateY(-1px);
+}
+
+.mobile-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.mobile-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-header-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mobile-header-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.mobile-header-chevron {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.desktop-chat-title {
+  display: block;
+}
+
+/* ===== Mobile User Info Modal ===== */
+.mobile-user-modal {
+  max-width: 400px;
+}
+
+.mobile-user-profile {
+  text-align: center;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+}
+
+.mobile-user-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: white;
+  margin: 0 auto var(--space-4);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+}
+
+.mobile-user-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-full);
+  z-index: -1;
+  opacity: 0.3;
+  animation: pulse 2s infinite;
+}
+
+.mobile-user-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+}
+
+.mobile-user-details {
+  margin-bottom: var(--space-6);
+}
+
+.mobile-user-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 /* ===== Mobile Navigation Overlay ===== */
 .mobile-nav-overlay {
   position: fixed;
@@ -1001,6 +1124,7 @@ body {
 .header-left {
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
 .header-left h1 {
@@ -1481,6 +1605,16 @@ body {
     display: flex !important;
   }
   
+  /* Show mobile user header when friend is selected */
+  .mobile-user-header {
+    display: flex !important;
+  }
+  
+  /* Hide desktop chat title on mobile */
+  .desktop-chat-title {
+    display: none !important;
+  }
+  
   /* Hide desktop sidebar */
   .sidebar {
     display: none;
@@ -1517,9 +1651,10 @@ body {
     max-height: calc(100vh - 2rem);
   }
   
-  /* Adjust input area for mobile */
+  /* Adjust input area for mobile - Fixed padding */
   .message-input-area {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
   }
   
   .input-container {
@@ -1533,6 +1668,8 @@ body {
   /* Make messages more compact on mobile */
   .messages-container {
     padding: var(--space-4);
+    /* Add bottom padding to ensure messages aren't hidden behind input */
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
   }
   
   .message {
@@ -1596,5 +1733,37 @@ body {
   
   .mobile-nav-header h2 {
     font-size: 1.25rem;
+  }
+  
+  /* Adjust mobile user header for small screens */
+  .mobile-user-header {
+    max-width: 250px;
+  }
+  
+  .mobile-header-name {
+    font-size: 0.8rem;
+  }
+  
+  .mobile-header-status {
+    font-size: 0.7rem;
+  }
+  
+  .mobile-header-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+}
+
+/* Fix for iPhone/Safari bottom safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 768px) {
+    .message-input-area {
+      padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    }
+    
+    .messages-container {
+      padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
+    }
   }
 }

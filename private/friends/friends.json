@@ -6,5 +6,13 @@
     "status": "accepted",
     "timestamp": 1757621921630,
     "acceptedAt": 1757621922893
+  },
+  {
+    "id": "0f7776876f44b7ec6ba0765e74c17b5a",
+    "user1": "b2f37103125da81537624562314ec70c",
+    "user2": "8dc2c0df3793f494fd677f880ecfe237",
+    "status": "accepted",
+    "timestamp": 1757638607956,
+    "acceptedAt": 1757638610843
   }
 ]

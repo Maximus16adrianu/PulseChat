@@ -1,1 +1,58 @@
-[]
+[
+  {
+    "id": "6288b6da2093274c3b14b7fd6cafeb0e",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "content": "mobile updated!",
+    "type": "text",
+    "timestamp": 1757638373146
+  },
+  {
+    "id": "f151240701b6cc60739911862bf91129",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "b2f37103125da81537624562314ec70c",
+    "content": "heyya",
+    "type": "text",
+    "timestamp": 1757638622192
+  },
+  {
+    "id": "3ae2a2ce07bb41438a1a3ec14c615899",
+    "senderId": "b2f37103125da81537624562314ec70c",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "ooh I see it then",
+    "type": "text",
+    "timestamp": 1757638628997
+  },
+  {
+    "id": "464765c1248d6cb753c683b3092c627f",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "b2f37103125da81537624562314ec70c",
+    "content": ":3",
+    "type": "text",
+    "timestamp": 1757638642876
+  },
+  {
+    "id": "b2ec7ae60112b511f43df6e639eabd77",
+    "senderId": "b2f37103125da81537624562314ec70c",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "XD",
+    "type": "text",
+    "timestamp": 1757638646327
+  },
+  {
+    "id": "bf0d9af1cb49ed24ac5851a010277968",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "b2f37103125da81537624562314ec70c",
+    "content": "mobile isnt finished ima do another update rq",
+    "type": "text",
+    "timestamp": 1757638658425
+  },
+  {
+    "id": "aadaeb4f6ca8cea3abe1f7dd44596b10",
+    "senderId": "b2f37103125da81537624562314ec70c",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "Okay",
+    "type": "text",
+    "timestamp": 1757638664395
+  }
+]

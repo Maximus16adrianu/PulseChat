@@ -23,6 +23,22 @@ const PulseChat = {
         mobileFriendRequestsBadge: document.getElementById('mobileFriendRequestsBadge'),
         mobileFriendRequestsToggle: document.getElementById('mobileFriendRequestsToggle'),
         
+        // Mobile User Header & Modal
+        mobileUserHeader: document.getElementById('mobileUserHeader'),
+        mobileHeaderAvatar: document.getElementById('mobileHeaderAvatar'),
+        mobileHeaderName: document.getElementById('mobileHeaderName'),
+        mobileHeaderStatus: document.getElementById('mobileHeaderStatus'),
+        mobileUserInfoModal: document.getElementById('mobileUserInfoModal'),
+        mobileUserAvatar: document.getElementById('mobileUserAvatar'),
+        mobileUserName: document.getElementById('mobileUserName'),
+        mobileUserRole: document.getElementById('mobileUserRole'),
+        mobileFriendsSinceDate: document.getElementById('mobileFriendsSinceDate'),
+        mobileFriendTier: document.getElementById('mobileFriendTier'),
+        mobileFriendRoleInfo: document.getElementById('mobileFriendRoleInfo'),
+        mobileBlockBtn: document.getElementById('mobileBlockBtn'),
+        mobileAdminActions: document.getElementById('mobileAdminActions'),
+        mobileMuteDuration: document.getElementById('mobileMuteDuration'),
+        
         // Modals
         loginModal: document.getElementById('loginModal'),
         registerModal: document.getElementById('registerModal'),
@@ -179,6 +195,60 @@ function renderMobileFriendRequests() {
         `;
         mobileRequestsList.appendChild(requestDiv);
     });
+}
+
+// ===== Mobile User Info Functions =====
+
+function showMobileUserInfo() {
+    if (!PulseChat.selectedFriend) return;
+    
+    updateMobileUserInfo(PulseChat.selectedFriend);
+    showModal(PulseChat.elements.mobileUserInfoModal);
+}
+
+function closeMobileUserInfo() {
+    hideModal(PulseChat.elements.mobileUserInfoModal);
+}
+
+function updateMobileUserHeader(friend) {
+    if (!friend) {
+        PulseChat.elements.mobileUserHeader.classList.add('hidden');
+        return;
+    }
+    
+    // Update mobile header elements
+    PulseChat.elements.mobileHeaderAvatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
+    PulseChat.elements.mobileHeaderName.textContent = friend.friendUsername;
+    PulseChat.elements.mobileHeaderStatus.textContent = 'Tap to view profile';
+    
+    // Show mobile header
+    PulseChat.elements.mobileUserHeader.classList.remove('hidden');
+}
+
+function updateMobileUserInfo(friend) {
+    if (!friend) return;
+    
+    // Update mobile user info modal
+    PulseChat.elements.mobileUserAvatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
+    PulseChat.elements.mobileUserName.textContent = friend.friendUsername;
+    
+    const mobileRoleElement = PulseChat.elements.mobileUserRole;
+    mobileRoleElement.textContent = friend.friendRole;
+    mobileRoleElement.className = `role-badge ${friend.friendRole}`;
+    
+    // Update details
+    const friendsSinceDate = new Date(friend.friendsSince).toLocaleDateString();
+    PulseChat.elements.mobileFriendsSinceDate.textContent = friendsSinceDate;
+    PulseChat.elements.mobileFriendTier.textContent = `Tier ${friend.friendTier}`;
+    PulseChat.elements.mobileFriendRoleInfo.textContent = friend.friendRole.toUpperCase();
+    
+    // Show/hide admin actions
+    const mobileAdminActions = PulseChat.elements.mobileAdminActions;
+    if (isAdminOrOwner()) {
+        mobileAdminActions.classList.remove('hidden');
+    } else {
+        mobileAdminActions.classList.add('hidden');
+    }
 }
 
 // ===== Utility Functions =====
@@ -396,6 +466,7 @@ PulseChat.socket.on('user_blocked', (data) => {
     if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === data.userId) {
         PulseChat.selectedFriend = null;
         PulseChat.elements.userInfoPanel.classList.add('hidden');
+        PulseChat.elements.mobileUserHeader.classList.add('hidden');
         PulseChat.elements.messagesContainer.innerHTML = `
             <div class="empty-state">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -728,15 +799,20 @@ function selectFriend(friend) {
         mobileFriendElement.classList.add('active');
     }
     
+    // Update desktop title
     PulseChat.elements.chatTitle.textContent = `Chat with ${friend.friendUsername}`;
+    
+    // Update mobile header
+    updateMobileUserHeader(friend);
     
     // Enable inputs
     PulseChat.elements.messageInput.disabled = false;
     PulseChat.elements.sendBtn.disabled = false;
     PulseChat.elements.uploadBtn.disabled = false;
     
-    // Show user info panel (desktop only)
+    // Update user info panels (both desktop and mobile)
     updateUserInfoPanel(friend);
+    updateMobileUserInfo(friend);
     PulseChat.elements.userInfoPanel.classList.remove('hidden');
     
     // Load messages
@@ -752,24 +828,24 @@ function selectFriend(friend) {
 }
 
 function updateUserInfoPanel(friend) {
-    // Update avatar (first letter of username)
+    // Update desktop avatar (first letter of username)
     const avatar = PulseChat.elements.friendAvatar;
     avatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
     
-    // Update info
+    // Update desktop info
     PulseChat.elements.friendInfoUsername.textContent = friend.friendUsername;
     
     const roleElement = PulseChat.elements.friendInfoRole;
     roleElement.textContent = friend.friendRole;
     roleElement.className = `role-badge ${friend.friendRole}`;
     
-    // Update details
+    // Update desktop details
     const friendsSinceDate = new Date(friend.friendsSince).toLocaleDateString();
     PulseChat.elements.friendsSinceDate.textContent = friendsSinceDate;
     PulseChat.elements.friendTier.textContent = `Tier ${friend.friendTier}`;
     PulseChat.elements.friendRoleInfo.textContent = friend.friendRole.toUpperCase();
     
-    // Show/hide admin actions
+    // Show/hide admin actions for desktop
     const adminActions = PulseChat.elements.adminActions;
     if (isAdminOrOwner()) {
         adminActions.classList.remove('hidden');
@@ -966,7 +1042,10 @@ function blockUser() {
 function muteUser() {
     if (!PulseChat.selectedFriend || !isAdminOrOwner()) return;
     
-    const duration = PulseChat.elements.muteDuration.value;
+    // Get duration from both desktop and mobile selects
+    const desktopDuration = PulseChat.elements.muteDuration.value;
+    const mobileDuration = PulseChat.elements.mobileMuteDuration.value;
+    const duration = desktopDuration || mobileDuration;
     const reason = `Muted by ${PulseChat.currentUser.role} for ${duration}`;
     
     if (confirm(`Are you sure you want to mute ${PulseChat.selectedFriend.friendUsername} for ${duration}?`)) {
@@ -982,6 +1061,10 @@ function showBanModal() {
     if (!PulseChat.selectedFriend) return;
     PulseChat.userToBan = PulseChat.selectedFriend.friendId;
     showModal(PulseChat.elements.banReasonModal);
+    // Close mobile user info modal if open
+    if (!PulseChat.elements.mobileUserInfoModal.classList.contains('hidden')) {
+        closeMobileUserInfo();
+    }
 }
 
 function closeBanModal() {
@@ -1099,6 +1182,8 @@ document.addEventListener('click', function(e) {
             closeSettings();
         } else if (modal.id === 'banReasonModal') {
             closeBanModal();
+        } else if (modal.id === 'mobileUserInfoModal') {
+            closeMobileUserInfo();
         }
     }
 });
@@ -1140,4 +1225,6 @@ window.closeBanModal = closeBanModal;
 window.confirmBan = confirmBan;
 window.showSettings = showSettings;
 window.closeSettings = closeSettings;
-window.saveSettings = saveSet
+window.saveSettings = saveSettings;
+window.showMobileUserInfo = showMobileUserInfo;
+window.closeMobileUserInfo = closeMobileUserInfo;

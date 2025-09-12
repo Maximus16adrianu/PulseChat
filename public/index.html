@@ -74,6 +74,85 @@
         </div>
     </div>
 
+    <!-- Mobile User Info Modal -->
+    <div id="mobileUserInfoModal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content mobile-user-modal">
+            <div class="modal-header">
+                <h2>User Profile</h2>
+                <button class="btn-close" onclick="closeMobileUserInfo()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="mobile-user-profile">
+                <div class="mobile-user-avatar" id="mobileUserAvatar">?</div>
+                <h3 id="mobileUserName" class="mobile-user-name">Select a friend</h3>
+                <span id="mobileUserRole" class="role-badge"></span>
+            </div>
+            
+            <div class="mobile-user-details">
+                <div class="detail-item">
+                    <span class="detail-label">Friends Since</span>
+                    <span class="detail-value" id="mobileFriendsSinceDate">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">User Tier</span>
+                    <span class="detail-value" id="mobileFriendTier">-</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Role</span>
+                    <span class="detail-value" id="mobileFriendRoleInfo">-</span>
+                </div>
+            </div>
+            
+            <div class="mobile-user-actions">
+                <button class="btn btn-danger" id="mobileBlockBtn" onclick="blockUser()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M4.93 4.93l14.14 14.14"></path>
+                    </svg>
+                    Block User
+                </button>
+                
+                <!-- Admin Actions -->
+                <div class="admin-actions hidden" id="mobileAdminActions">
+                    <div class="admin-section-title">Admin Actions</div>
+                    
+                    <div class="admin-action-group">
+                        <label for="mobileMuteDuration">Mute Duration</label>
+                        <select class="form-select" id="mobileMuteDuration">
+                            <option value="1h">1 Hour</option>
+                            <option value="1d">1 Day</option>
+                            <option value="1w">1 Week</option>
+                        </select>
+                        <button class="btn btn-warning" onclick="muteUser()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <line x1="23" y1="9" x2="17" y2="15"></line>
+                                <line x1="17" y1="9" x2="23" y2="15"></line>
+                            </svg>
+                            Mute User
+                        </button>
+                    </div>
+                    
+                    <button class="btn btn-danger" onclick="showBanModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10 2v20"></path>
+                            <path d="M14 2v20"></path>
+                            <path d="M4 7h16"></path>
+                            <path d="M4 17h16"></path>
+                        </svg>
+                        Ban User
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Auto-login indicator -->
     <div id="autoLoginIndicator" class="auto-login-indicator hidden">
         <div class="login-content">
@@ -316,7 +395,23 @@
                             <line x1="3" y1="18" x2="21" y2="18"></line>
                         </svg>
                     </button>
-                    <h1 id="chatTitle">Select a friend to start chatting</h1>
+                    
+                    <!-- Desktop Title -->
+                    <h1 id="chatTitle" class="desktop-chat-title">Select a friend to start chatting</h1>
+                    
+                    <!-- Mobile User Profile Header -->
+                    <div id="mobileUserHeader" class="mobile-user-header hidden" onclick="showMobileUserInfo()">
+                        <div class="mobile-header-avatar" id="mobileHeaderAvatar">?</div>
+                        <div class="mobile-header-info">
+                            <div class="mobile-header-name" id="mobileHeaderName">Select a friend</div>
+                            <div class="mobile-header-status" id="mobileHeaderStatus">Tap to view profile</div>
+                        </div>
+                        <div class="mobile-header-chevron">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9,18 15,12 9,6"></polyline>
+                            </svg>
+                        </div>
+                    </div>
                 </div>
                 <div class="header-right">
                     <div class="user-info">
