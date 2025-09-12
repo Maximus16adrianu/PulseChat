@@ -9,6 +9,71 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
+    <!-- Mobile Navigation Overlay -->
+    <div id="mobileNavOverlay" class="mobile-nav-overlay hidden">
+        <div class="mobile-nav-backdrop"></div>
+        <div class="mobile-nav-content">
+            <div class="mobile-nav-header">
+                <h2>PulseChat</h2>
+                <button class="mobile-nav-close" id="mobileNavClose">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Mobile Friends Section -->
+            <div class="mobile-friends-section">
+                <!-- Friend Requests -->
+                <div class="mobile-friend-requests-section">
+                    <div class="mobile-subsection-header" onclick="toggleFriendRequests()">
+                        <span class="mobile-subsection-title">
+                            Friend Requests
+                            <span id="mobileFriendRequestsBadge" class="badge hidden">0</span>
+                        </span>
+                        <button class="toggle-btn" id="mobileFriendRequestsToggle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="mobileFriendRequestsList" class="mobile-friend-requests-list">
+                        <div class="empty-state">No pending friend requests</div>
+                    </div>
+                </div>
+                
+                <!-- Friends List -->
+                <div class="mobile-friends-list-container">
+                    <div class="mobile-section-header">
+                        <h3>Friends</h3>
+                        <button class="btn btn-small btn-primary" onclick="showFriendsManagement()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            Manage
+                        </button>
+                    </div>
+                    <div class="mobile-friends-list" id="mobileFriendsList">
+                        <div class="empty-state">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <p>No friends yet</p>
+                            <p>Add some friends to start chatting!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Auto-login indicator -->
     <div id="autoLoginIndicator" class="auto-login-indicator hidden">
         <div class="login-content">
@@ -187,8 +252,8 @@
 
     <!-- Main Application -->
     <div class="app-container hidden" id="mainApp">
-        <!-- Sidebar -->
-        <aside class="sidebar">
+        <!-- Desktop Sidebar -->
+        <aside class="sidebar" id="desktopSidebar">
             <!-- Friends Panel -->
             <div class="friends-section">
                 <div class="section-header">
@@ -243,6 +308,14 @@
             <!-- Header -->
             <header class="app-header">
                 <div class="header-left">
+                    <!-- Mobile Menu Button -->
+                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
                     <h1 id="chatTitle">Select a friend to start chatting</h1>
                 </div>
                 <div class="header-right">
@@ -307,7 +380,7 @@
                     </div>
                 </div>
 
-                <!-- User Info Panel -->
+                <!-- User Info Panel (Desktop Only) -->
                 <aside class="user-info-panel hidden" id="userInfoPanel">
                     <div class="user-profile">
                         <div class="user-avatar" id="friendAvatar">?</div>

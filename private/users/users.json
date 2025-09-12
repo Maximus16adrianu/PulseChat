@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "id": "8dc2c0df3793f494fd677f880ecfe237",
+    "username": "Cerial",
+    "password": "@adan.mal.16!:",
+    "tier": 1,
+    "role": "owner",
+    "banned": false,
+    "created": 1757621678732,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "username": "snipztropix",
+    "password": "niggernigger",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757621918519,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  },
+  {
+    "id": "6f0e9421449cf79d14b2f85dddd8bdcf",
+    "username": "tomate",
+    "password": "tomate",
+    "tier": 1,
+    "role": "user",
+    "banned": false,
+    "created": 1757635646520,
+    "settings": {
+      "allowFriendRequests": true
+    }
+  }
+]

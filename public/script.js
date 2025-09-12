@@ -14,6 +14,15 @@ const PulseChat = {
     
     // UI Elements Cache
     elements: {
+        // Mobile Navigation
+        mobileNavOverlay: document.getElementById('mobileNavOverlay'),
+        mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+        mobileNavClose: document.getElementById('mobileNavClose'),
+        mobileFriendsList: document.getElementById('mobileFriendsList'),
+        mobileFriendRequestsList: document.getElementById('mobileFriendRequestsList'),
+        mobileFriendRequestsBadge: document.getElementById('mobileFriendRequestsBadge'),
+        mobileFriendRequestsToggle: document.getElementById('mobileFriendRequestsToggle'),
+        
         // Modals
         loginModal: document.getElementById('loginModal'),
         registerModal: document.getElementById('registerModal'),
@@ -24,6 +33,7 @@ const PulseChat = {
         
         // Main App
         mainApp: document.getElementById('mainApp'),
+        desktopSidebar: document.getElementById('desktopSidebar'),
         
         // Chat Elements
         chatTitle: document.getElementById('chatTitle'),
@@ -72,6 +82,104 @@ const PulseChat = {
         notificationContainer: document.getElementById('notificationContainer')
     }
 };
+
+// ===== Mobile Navigation Functions =====
+
+function openMobileNav() {
+    PulseChat.elements.mobileNavOverlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Sync mobile data with desktop data
+    renderMobileFriendsList();
+    renderMobileFriendRequests();
+}
+
+function closeMobileNav() {
+    PulseChat.elements.mobileNavOverlay.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function renderMobileFriendsList() {
+    const mobileList = PulseChat.elements.mobileFriendsList;
+    
+    if (PulseChat.friends.length === 0) {
+        mobileList.innerHTML = `
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <p>No friends yet</p>
+                <p>Add some friends to start chatting!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    mobileList.innerHTML = '';
+    
+    PulseChat.friends.forEach(friend => {
+        const friendDiv = document.createElement('div');
+        friendDiv.className = 'friend-item';
+        friendDiv.setAttribute('data-friend-id', friend.friendId);
+        
+        // Check if this friend is currently selected
+        if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === friend.friendId) {
+            friendDiv.classList.add('active');
+        }
+        
+        friendDiv.innerHTML = `
+            <div class="friend-item-info">
+                <div class="friend-username">${escapeHtml(friend.friendUsername)}</div>
+                <div class="friend-role">${friend.friendRole} • Tier ${friend.friendTier}</div>
+            </div>
+        `;
+        
+        friendDiv.onclick = () => {
+            selectFriend(friend);
+            closeMobileNav(); // Close mobile nav after selecting a friend
+        };
+        mobileList.appendChild(friendDiv);
+    });
+}
+
+function renderMobileFriendRequests() {
+    const mobileRequestsList = PulseChat.elements.mobileFriendRequestsList;
+    const mobileBadge = PulseChat.elements.mobileFriendRequestsBadge;
+    
+    if (PulseChat.friendRequests.length === 0) {
+        mobileRequestsList.innerHTML = '<div class="empty-state">No pending friend requests</div>';
+        mobileBadge.classList.add('hidden');
+        return;
+    }
+    
+    // Update badge
+    mobileBadge.textContent = PulseChat.friendRequests.length;
+    mobileBadge.classList.remove('hidden');
+    
+    mobileRequestsList.innerHTML = '';
+    
+    PulseChat.friendRequests.forEach(request => {
+        const requestDiv = document.createElement('div');
+        requestDiv.className = 'friend-request-item';
+        requestDiv.innerHTML = `
+            <div class="friend-request-info">
+                <span class="friend-request-username">${escapeHtml(request.senderUsername)}</span>
+            </div>
+            <div class="friend-request-buttons">
+                <button class="friend-request-btn accept-btn" onclick="respondToFriendRequest('${request.id}', true)">
+                    ✓ Accept
+                </button>
+                <button class="friend-request-btn deny-btn" onclick="respondToFriendRequest('${request.id}', false)">
+                    ✗ Deny
+                </button>
+            </div>
+        `;
+        mobileRequestsList.appendChild(requestDiv);
+    });
+}
 
 // ===== Utility Functions =====
 
@@ -202,24 +310,17 @@ PulseChat.socket.on('muted', (data) => {
     showNotification(`You have been muted for ${data.duration}. Reason: ${data.reason}`, 'error');
 });
 
-PulseChat.socket.on('queued', (data) => {
-    hideModal(PulseChat.elements.autoLoginIndicator);
-    showMessage('authMessage', `You are in queue. Position: ${data.position}`, 'error');
-});
-
-PulseChat.socket.on('queue_ready', () => {
-    showMessage('authMessage', 'You can now connect!', 'success');
-});
-
 // Friends Events
 PulseChat.socket.on('friends_list', (friendsList) => {
     PulseChat.friends = friendsList;
     renderFriendsList();
+    renderMobileFriendsList();
 });
 
 PulseChat.socket.on('friend_requests', (requests) => {
     PulseChat.friendRequests = requests;
     renderFriendRequests();
+    renderMobileFriendRequests();
 });
 
 PulseChat.socket.on('blocked_users', (blocked) => {
@@ -230,6 +331,7 @@ PulseChat.socket.on('blocked_users', (blocked) => {
 PulseChat.socket.on('friend_request_received', (request) => {
     PulseChat.friendRequests.push(request);
     renderFriendRequests();
+    renderMobileFriendRequests();
     showNotification(`New friend request from ${request.senderUsername}!`, 'info');
 });
 
@@ -417,6 +519,10 @@ function checkAutoLogin() {
 function showFriendsManagement() {
     showModal(PulseChat.elements.friendsManagementModal);
     renderBlockedUsers();
+    // Close mobile nav if it's open
+    if (!PulseChat.elements.mobileNavOverlay.classList.contains('hidden')) {
+        closeMobileNav();
+    }
 }
 
 function closeFriendsManagement() {
@@ -455,17 +561,31 @@ function toggleFriendRequests() {
     PulseChat.friendRequestsVisible = !PulseChat.friendRequestsVisible;
     const requestsList = PulseChat.elements.friendRequestsList;
     const toggle = PulseChat.elements.friendRequestsToggle;
+    const mobileRequestsList = PulseChat.elements.mobileFriendRequestsList;
+    const mobileToggle = PulseChat.elements.mobileFriendRequestsToggle;
     
     if (PulseChat.friendRequestsVisible) {
         requestsList.classList.remove('collapsed');
+        mobileRequestsList.classList.remove('collapsed');
         toggle.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6,9 12,15 18,9"></polyline>
+            </svg>
+        `;
+        mobileToggle.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6,9 12,15 18,9"></polyline>
             </svg>
         `;
     } else {
         requestsList.classList.add('collapsed');
+        mobileRequestsList.classList.add('collapsed');
         toggle.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9,18 15,12 9,6"></polyline>
+            </svg>
+        `;
+        mobileToggle.innerHTML = `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9,18 15,12 9,6"></polyline>
             </svg>
@@ -558,6 +678,11 @@ function renderFriendsList() {
         friendDiv.className = 'friend-item';
         friendDiv.setAttribute('data-friend-id', friend.friendId);
         
+        // Check if this friend is currently selected
+        if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === friend.friendId) {
+            friendDiv.classList.add('active');
+        }
+        
         friendDiv.innerHTML = `
             <div class="friend-item-info">
                 <div class="friend-username">${escapeHtml(friend.friendUsername)}</div>
@@ -587,14 +712,20 @@ function unblockUser(userId) {
 function selectFriend(friend) {
     PulseChat.selectedFriend = friend;
     
-    // Update UI
+    // Update UI for both desktop and mobile
     document.querySelectorAll('.friend-item').forEach(item => {
         item.classList.remove('active');
     });
     
-    const friendElement = document.querySelector(`[data-friend-id="${friend.friendId}"]`);
-    if (friendElement) {
-        friendElement.classList.add('active');
+    // Update both desktop and mobile friend items
+    const desktopFriendElement = PulseChat.elements.friendsList.querySelector(`[data-friend-id="${friend.friendId}"]`);
+    const mobileFriendElement = PulseChat.elements.mobileFriendsList.querySelector(`[data-friend-id="${friend.friendId}"]`);
+    
+    if (desktopFriendElement) {
+        desktopFriendElement.classList.add('active');
+    }
+    if (mobileFriendElement) {
+        mobileFriendElement.classList.add('active');
     }
     
     PulseChat.elements.chatTitle.textContent = `Chat with ${friend.friendUsername}`;
@@ -604,7 +735,7 @@ function selectFriend(friend) {
     PulseChat.elements.sendBtn.disabled = false;
     PulseChat.elements.uploadBtn.disabled = false;
     
-    // Show user info panel
+    // Show user info panel (desktop only)
     updateUserInfoPanel(friend);
     PulseChat.elements.userInfoPanel.classList.remove('hidden');
     
@@ -806,11 +937,13 @@ function uploadFile() {
             showNotification(data.error, 'error');
         } else {
             showNotification('File uploaded successfully!', 'success');
-            fileInput.value = '';
         }
+        // Always clear the input after upload attempt
+        fileInput.value = '';
     })
     .catch(err => {
         showNotification('Upload failed', 'error');
+        fileInput.value = '';
     });
 }
 
@@ -868,6 +1001,10 @@ function confirmBan() {
 
 function showSettings() {
     showModal(PulseChat.elements.settingsModal);
+    // Close mobile nav if it's open
+    if (!PulseChat.elements.mobileNavOverlay.classList.contains('hidden')) {
+        closeMobileNav();
+    }
 }
 
 function closeSettings() {
@@ -882,6 +1019,17 @@ function saveSettings() {
 }
 
 // ===== Event Listeners =====
+
+// Mobile Navigation Event Listeners
+PulseChat.elements.mobileMenuBtn.addEventListener('click', openMobileNav);
+PulseChat.elements.mobileNavClose.addEventListener('click', closeMobileNav);
+
+// Mobile navigation backdrop click
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('mobile-nav-backdrop')) {
+        closeMobileNav();
+    }
+});
 
 // Auto-resize textarea
 PulseChat.elements.messageInput.addEventListener('input', function() {
@@ -955,6 +1103,14 @@ document.addEventListener('click', function(e) {
     }
 });
 
+// Handle window resize to manage mobile/desktop views
+window.addEventListener('resize', function() {
+    // Close mobile nav if window becomes desktop size
+    if (window.innerWidth > 768 && !PulseChat.elements.mobileNavOverlay.classList.contains('hidden')) {
+        closeMobileNav();
+    }
+});
+
 // ===== Initialization =====
 
 window.addEventListener('load', () => {
@@ -984,4 +1140,4 @@ window.closeBanModal = closeBanModal;
 window.confirmBan = confirmBan;
 window.showSettings = showSettings;
 window.closeSettings = closeSettings;
-window.saveSettings = saveSettings;
+window.saveSettings = saveSet

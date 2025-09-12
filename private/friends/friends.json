@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "b84e0f7b7efea55bb0aab3a090befacc",
+    "user1": "8dc2c0df3793f494fd677f880ecfe237",
+    "user2": "9b4d4d9865a8387a72bbf03c3d0c61b3",
+    "status": "accepted",
+    "timestamp": 1757621921630,
+    "acceptedAt": 1757621922893
+  }
+]

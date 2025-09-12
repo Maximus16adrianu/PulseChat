@@ -46,7 +46,6 @@ app.use('/api/', apiLimiter);
 
 // In-memory storage for active users and rate limiting
 const activeUsers = new Map();
-const userQueues = new Map();
 const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
@@ -92,18 +91,8 @@ async function initializeDirectories() {
   }
 }
 
-// File upload configuration
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const isVideo = file.mimetype.startsWith('video/');
-    const dir = isVideo ? 'private/messages/videos/' : 'private/messages/pictures/';
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// File upload configuration - Using memory storage first for validation
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedImages = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -189,9 +178,10 @@ async function deleteMessagesForUsers(user1Id, user2Id) {
     if (message.type === 'image' || message.type === 'video') {
       try {
         const filePath = message.type === 'image' 
-          ? path.join(__dirname, 'private/messages/pictures', message.content)
-          : path.join(__dirname, 'private/messages/videos', message.content);
+          ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+          : path.join(__dirname, 'private', 'messages', 'videos', message.content);
         await fs.unlink(filePath);
+        console.log(`Deleted file: ${filePath}`);
       } catch (error) {
         console.log(`Could not delete file ${message.content}:`, error.message);
       }
@@ -221,11 +211,13 @@ async function deleteMessageById(messageId) {
   if (message.type === 'image' || message.type === 'video') {
     try {
       const filePath = message.type === 'image' 
-        ? path.join(__dirname, 'private/messages/pictures', message.content)
-        : path.join(__dirname, 'private/messages/videos', message.content);
+        ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+        : path.join(__dirname, 'private', 'messages', 'videos', message.content);
       await fs.unlink(filePath);
+      console.log(`Deleted file: ${filePath}`);
     } catch (error) {
-      console.log(`Could not delete file ${message.content}:`, error.message);
+      console.error(`Error deleting file ${message.content}:`, error);
+      // Continue with message deletion even if file deletion fails
     }
   }
   
@@ -385,7 +377,7 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
-// FIXED: Send updated user lists helper
+// Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
     const friends = await loadJSON('private/friends/friends.json');
@@ -436,7 +428,7 @@ async function sendUpdatedUserLists(socket, userId) {
   }
 }
 
-// FIXED: Helper function to get socket by user ID
+// Helper function to get socket by user ID
 function getSocketByUserId(userId) {
   const userConnection = Array.from(activeUsers.values()).find(u => u.user.id === userId);
   return userConnection ? io.sockets.sockets.get(userConnection.socket) : null;
@@ -612,10 +604,9 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check active user limit
+      // Check active user limit - NO MORE QUEUE, just reject
       if (activeUsers.size >= MAX_ACTIVE_USERS && !activeUsers.has(user.id)) {
-        userQueues.set(user.id, socket.id);
-        socket.emit('queued', { position: userQueues.size });
+        socket.emit('auth_error', `Server is currently full (${MAX_ACTIVE_USERS}/${MAX_ACTIVE_USERS} users). Please try again later.`);
         return;
       }
       
@@ -1013,7 +1004,7 @@ io.on('connection', (socket) => {
       
       await saveJSON('private/friends/friends.json', friends);
       
-      // FIXED: Update friends list and blocked list - pass socket object, not socket.id
+      // Update friends list and blocked list
       await sendUpdatedUserLists(socket, socket.userId);
       
       socket.emit('user_blocked', { userId: targetUserId });
@@ -1187,15 +1178,6 @@ io.on('connection', (socket) => {
       
       activeUsers.delete(socket.userId);
       socket.userId = null;
-      
-      // Process queue
-      if (userQueues.size > 0) {
-        const nextUserId = userQueues.keys().next().value;
-        const nextSocketId = userQueues.get(nextUserId);
-        userQueues.delete(nextUserId);
-        
-        io.to(nextSocketId).emit('queue_ready');
-      }
     }
     
     socket.emit('logged_out');
@@ -1206,15 +1188,6 @@ io.on('connection', (socket) => {
     
     if (socket.userId) {
       activeUsers.delete(socket.userId);
-      
-      // Process queue
-      if (userQueues.size > 0) {
-        const nextUserId = userQueues.keys().next().value;
-        const nextSocketId = userQueues.get(nextUserId);
-        userQueues.delete(nextUserId);
-        
-        io.to(nextSocketId).emit('queue_ready');
-      }
     }
   });
 });
@@ -1258,10 +1231,17 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// Fixed upload endpoint that validates BEFORE saving files
 app.post('/api/upload', upload.single('file'), async (req, res) => {
+  let savedFilePath = null;
+  
   try {
     if (!req.body.userId || !req.body.receiverId) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
     
     const userId = req.body.userId;
@@ -1309,13 +1289,21 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(403).json({ error: 'Can only send files to friends' });
     }
     
+    // All validations passed, now save the file to disk
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const filename = uniqueSuffix + path.extname(req.file.originalname);
+    const dir = isVideo ? 'private/messages/videos/' : 'private/messages/pictures/';
+    savedFilePath = path.join(__dirname, dir, filename);
+    
+    await fs.writeFile(savedFilePath, req.file.buffer);
+    
     // Save message record
     const messages = await loadJSON('private/messages/messages.json');
     const message = {
       id: generateUserId(),
       senderId: userId,
       receiverId,
-      content: req.file.filename,
+      content: filename,
       type: isVideo ? 'video' : 'image',
       timestamp: Date.now()
     };
@@ -1339,24 +1327,40 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Clean up saved file if there was an error after saving
+    if (savedFilePath) {
+      try {
+        await fs.unlink(savedFilePath);
+        console.log('Cleaned up failed upload file:', savedFilePath);
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
+      }
+    }
+    
     res.status(500).json({ error: 'Upload failed' });
   }
 });
 
 // Serve media files
-app.get('/api/media/:filename', (req, res) => {
+app.get('/api/media/:filename', async (req, res) => {
   const filename = req.params.filename;
-  const imagePath = path.join(__dirname, 'private/messages/pictures', filename);
-  const videoPath = path.join(__dirname, 'private/messages/videos', filename);
+  const imagePath = path.join(__dirname, 'private', 'messages', 'pictures', filename);
+  const videoPath = path.join(__dirname, 'private', 'messages', 'videos', filename);
   
-  // Try image path first, then video path
-  fs.access(imagePath)
-    .then(() => res.sendFile(imagePath))
-    .catch(() => {
-      fs.access(videoPath)
-        .then(() => res.sendFile(videoPath))
-        .catch(() => res.status(404).send('File not found'));
-    });
+  try {
+    // Try image path first
+    await fs.access(imagePath);
+    res.sendFile(imagePath);
+  } catch {
+    try {
+      // Then try video path
+      await fs.access(videoPath);
+      res.sendFile(videoPath);
+    } catch {
+      res.status(404).send('File not found');
+    }
+  }
 });
 
 // Admin API Routes
@@ -1584,14 +1588,12 @@ app.get('/api/admin/stats', async (req, res) => {
     
     res.json({
       activeUsers: activeUsers.size,
-      queuedUsers: userQueues.size,
       maxUsers: MAX_ACTIVE_USERS,
       mutedUsers: activeMutes.length
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
-      queuedUsers: userQueues.size,
       maxUsers: MAX_ACTIVE_USERS,
       mutedUsers: 0
     });
