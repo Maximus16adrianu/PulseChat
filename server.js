@@ -500,19 +500,26 @@ function checkMessageLimit(userId) {
       const muteLevel = userLimits.escalationLevel;
       let muteDuration, reason;
       
+      // Fixed escalation system: 0→1min, 1→1min, 2+→1hour
       if (muteLevel === 0) {
-        // First time reaching 3 warnings
+        // First mute
         muteDuration = FIRST_MUTE_DURATION;
         reason = 'First spam mute (1 minute)';
-        userLimits.escalationLevel = 1;
+      } else if (muteLevel === 1) {
+        // Second mute
+        muteDuration = FIRST_MUTE_DURATION;
+        reason = 'Second spam mute (1 minute)';
       } else {
-        // Escalated mute
+        // Third+ mute
         muteDuration = ESCALATED_MUTE_DURATION;
         reason = 'Repeated spam violation (1 hour)';
       }
       
       const muteEnd = now + muteDuration;
-      saveMute(userId, muteEnd, reason, userLimits.escalationLevel);
+      saveMute(userId, muteEnd, reason, muteLevel);
+      
+      // Increment escalation level AFTER determining mute duration
+      userLimits.escalationLevel++;
       
       // Reset warnings and messages
       userLimits.warnings = [];

@@ -2,7 +2,7 @@
 
 // Global State
 const PulseChat = {
-    socket: io(),
+    socket: null,
     currentUser: null,
     selectedFriend: null,
     friends: [],
@@ -12,6 +12,13 @@ const PulseChat = {
     friendRequestsVisible: true,
     userToBan: null,
     currentSettingsTab: 'profile',
+    
+    // Connection state tracking
+    connectionState: {
+        wasBackgrounded: false,
+        lastActivity: Date.now(),
+        isReconnecting: false
+    },
     
     // UI Elements Cache
     elements: {
@@ -47,6 +54,9 @@ const PulseChat = {
         settingsModal: document.getElementById('settingsModal'),
         banReasonModal: document.getElementById('banReasonModal'),
         autoLoginIndicator: document.getElementById('autoLoginIndicator'),
+        
+        // Connection recovery overlay
+        reconnectOverlay: null, // Will be created dynamically
         
         // Main App
         mainApp: document.getElementById('mainApp'),
@@ -110,6 +120,410 @@ const PulseChat = {
         notificationContainer: document.getElementById('notificationContainer')
     }
 };
+
+// ===== Connection Recovery System =====
+
+function createReconnectOverlay() {
+    const overlay = document.createElement('div');
+    overlay.id = 'reconnectOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        z-index: 10000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+    
+    overlay.innerHTML = `
+        <div style="text-align: center;">
+            <div style="
+                width: 50px;
+                height: 50px;
+                border: 3px solid #333;
+                border-top: 3px solid #007bff;
+                border-radius: 50%;
+                margin: 0 auto 20px;
+                animation: spin 1s linear infinite;
+            "></div>
+            <h3 style="margin: 0 0 10px; font-size: 18px; font-weight: 600;">Reconnecting...</h3>
+            <p style="margin: 0; opacity: 0.8; font-size: 14px;">Re-establishing connection</p>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
+    
+    document.body.appendChild(overlay);
+    PulseChat.elements.reconnectOverlay = overlay;
+}
+
+function showReconnectOverlay() {
+    if (!PulseChat.elements.reconnectOverlay) {
+        createReconnectOverlay();
+    }
+    PulseChat.elements.reconnectOverlay.style.display = 'flex';
+}
+
+function hideReconnectOverlay() {
+    if (PulseChat.elements.reconnectOverlay) {
+        PulseChat.elements.reconnectOverlay.style.display = 'none';
+    }
+}
+
+function shouldReconnect() {
+    // Check if we were backgrounded and it's been a while
+    const now = Date.now();
+    const timeSinceBackground = now - PulseChat.connectionState.lastActivity;
+    
+    return PulseChat.connectionState.wasBackgrounded && 
+           timeSinceBackground > 30000 && // 30 seconds
+           !PulseChat.connectionState.isReconnecting &&
+           PulseChat.currentUser; // Only if we were logged in
+}
+
+function fullReconnect() {
+    if (PulseChat.connectionState.isReconnecting) return;
+    
+    console.log('Starting full reconnection...');
+    PulseChat.connectionState.isReconnecting = true;
+    
+    showReconnectOverlay();
+    
+    // Clear current state
+    PulseChat.selectedFriend = null;
+    PulseChat.friends = [];
+    PulseChat.friendRequests = [];
+    PulseChat.blockedUsers = [];
+    PulseChat.messages = [];
+    
+    // Disconnect old socket
+    if (PulseChat.socket) {
+        PulseChat.socket.disconnect();
+        PulseChat.socket = null;
+    }
+    
+    // Wait a bit, then reinitialize
+    setTimeout(() => {
+        initializeSocket();
+        
+        // Try to re-authenticate
+        const sessionToken = getCookie('pulsechat_session');
+        if (sessionToken && PulseChat.socket) {
+            PulseChat.socket.emit('authenticate', { sessionToken });
+        } else {
+            // No valid session, hide overlay and show login
+            PulseChat.connectionState.isReconnecting = false;
+            hideReconnectOverlay();
+            PulseChat.currentUser = null;
+            PulseChat.elements.mainApp.classList.add('hidden');
+            showLogin();
+        }
+    }, 1000);
+}
+
+// ===== Background/Foreground Detection =====
+
+function setupVisibilityHandling() {
+    // Page Visibility API
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            PulseChat.connectionState.wasBackgrounded = true;
+            PulseChat.connectionState.lastActivity = Date.now();
+        } else {
+            // Coming back to foreground
+            if (shouldReconnect()) {
+                fullReconnect();
+            }
+            PulseChat.connectionState.wasBackgrounded = false;
+        }
+    });
+    
+    // Window focus/blur as backup
+    window.addEventListener('blur', function() {
+        PulseChat.connectionState.wasBackgrounded = true;
+        PulseChat.connectionState.lastActivity = Date.now();
+    });
+    
+    window.addEventListener('focus', function() {
+        if (shouldReconnect()) {
+            fullReconnect();
+        }
+        PulseChat.connectionState.wasBackgrounded = false;
+    });
+    
+    // Page hide/show for mobile
+    window.addEventListener('pagehide', function() {
+        PulseChat.connectionState.wasBackgrounded = true;
+        PulseChat.connectionState.lastActivity = Date.now();
+    });
+    
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted && shouldReconnect()) {
+            fullReconnect();
+        }
+    });
+}
+
+// ===== Socket Initialization =====
+
+function initializeSocket() {
+    PulseChat.socket = io();
+    setupSocketHandlers();
+}
+
+function setupSocketHandlers() {
+    // Connection Events
+    PulseChat.socket.on('connect', () => {
+        console.log('Socket connected');
+    });
+    
+    PulseChat.socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+    });
+    
+    // Authentication Events
+    PulseChat.socket.on('authenticated', (data) => {
+        PulseChat.currentUser = data.user;
+        PulseChat.connectionState.isReconnecting = false;
+        
+        hideModal(PulseChat.elements.loginModal);
+        hideModal(PulseChat.elements.autoLoginIndicator);
+        hideReconnectOverlay();
+        PulseChat.elements.mainApp.classList.remove('hidden');
+        
+        // Update user info display
+        PulseChat.elements.currentUsername.textContent = PulseChat.currentUser.username;
+        
+        // Show role badge if applicable
+        if (['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
+            const roleBadge = PulseChat.elements.userRole;
+            roleBadge.textContent = PulseChat.currentUser.role;
+            roleBadge.className = `role-badge ${PulseChat.currentUser.role}`;
+            roleBadge.classList.remove('hidden');
+        }
+        
+        // Update settings UI
+        if (PulseChat.currentUser.settings) {
+            PulseChat.elements.allowFriendRequests.checked = 
+                PulseChat.currentUser.settings.allowFriendRequests !== false;
+        }
+        
+        // Update profile tab if it's visible
+        if (PulseChat.currentSettingsTab === 'profile') {
+            updateProfileTab();
+        }
+        
+        // Reset chat UI to empty state
+        PulseChat.elements.userInfoPanel.classList.add('hidden');
+        PulseChat.elements.mobileUserHeader.classList.add('hidden');
+        PulseChat.elements.messagesContainer.innerHTML = `
+            <div class="empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <h3>Select a friend to view your conversation</h3>
+            </div>
+        `;
+        PulseChat.elements.chatTitle.textContent = 'Select a friend to start chatting';
+        disableInputs();
+    });
+
+    PulseChat.socket.on('session_token', (token) => {
+        setCookie('pulsechat_session', token, 30); // 30 days
+    });
+
+    PulseChat.socket.on('auth_error', (message) => {
+        PulseChat.connectionState.isReconnecting = false;
+        hideModal(PulseChat.elements.autoLoginIndicator);
+        hideReconnectOverlay();
+        showMessage('authMessage', message, 'error');
+        deleteCookie('pulsechat_session');
+        PulseChat.currentUser = null;
+    });
+
+    PulseChat.socket.on('banned', (data) => {
+        alert(`You have been banned. Reason: ${data.reason}`);
+        deleteCookie('pulsechat_session');
+        location.reload();
+    });
+
+    PulseChat.socket.on('muted', (data) => {
+        showNotification(`You have been muted for ${data.duration}. Reason: ${data.reason}`, 'error');
+    });
+
+    // Friends Events
+    PulseChat.socket.on('friends_list', (friendsList) => {
+        PulseChat.friends = friendsList;
+        renderFriendsList();
+        renderMobileFriendsList();
+    });
+
+    PulseChat.socket.on('friend_requests', (requests) => {
+        PulseChat.friendRequests = requests;
+        renderFriendRequests();
+        renderMobileFriendRequests();
+    });
+
+    PulseChat.socket.on('blocked_users', (blocked) => {
+        PulseChat.blockedUsers = blocked;
+        renderBlockedUsers();
+    });
+
+    PulseChat.socket.on('friend_request_received', (request) => {
+        PulseChat.friendRequests.push(request);
+        renderFriendRequests();
+        renderMobileFriendRequests();
+        showNotification(`New friend request from ${request.senderUsername}!`, 'info');
+    });
+
+    PulseChat.socket.on('friend_request_accepted', (data) => {
+        showNotification(`${data.username} accepted your friend request!`, 'success');
+    });
+
+    // Message Events
+    PulseChat.socket.on('messages_loaded', (data) => {
+        if (PulseChat.selectedFriend && data.friendId === PulseChat.selectedFriend.friendId) {
+            PulseChat.messages = data.messages;
+            renderMessages();
+        }
+    });
+
+    PulseChat.socket.on('new_message', (message) => {
+        if (PulseChat.selectedFriend && 
+            (message.senderId === PulseChat.selectedFriend.friendId || message.receiverId === PulseChat.selectedFriend.friendId)) {
+            PulseChat.messages.push(message);
+            addMessageToChat(message);
+        }
+    });
+
+    PulseChat.socket.on('message_sent', (message) => {
+        PulseChat.messages.push(message);
+        addMessageToChat(message);
+    });
+
+    PulseChat.socket.on('message_deleted', (data) => {
+        // Remove from local messages array first
+        PulseChat.messages = PulseChat.messages.filter(m => m.id !== data.messageId);
+        
+        // Find and remove the message element
+        const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+        if (messageElement) {
+            messageElement.style.opacity = '0';
+            messageElement.style.transform = 'translateY(-20px)';
+            setTimeout(() => {
+                if (messageElement.parentNode) {
+                    messageElement.parentNode.removeChild(messageElement);
+                }
+                
+                // Check if container is now empty and show empty state if needed
+                const container = PulseChat.elements.messagesContainer;
+                const remainingMessages = container.querySelectorAll('.message');
+                if (remainingMessages.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <h3>No messages yet</h3>
+                            <p>Start your conversation!</p>
+                        </div>
+                    `;
+                }
+            }, 300);
+        } else {
+            // If element not found, just re-render all messages to ensure consistency
+            renderMessages();
+        }
+    });
+
+    PulseChat.socket.on('message_error', (message) => {
+        showNotification(message, 'error');
+    });
+
+    // Friend Action Events
+    PulseChat.socket.on('friend_request_sent', (request) => {
+        showMessage('friendMessage', 'Friend request sent!', 'success');
+        setTimeout(() => {
+            closeFriendsManagement();
+        }, 1500);
+    });
+
+    PulseChat.socket.on('friend_request_error', (message) => {
+        showMessage('friendMessage', message, 'error');
+    });
+
+    PulseChat.socket.on('friend_request_response_sent', (data) => {
+        const action = data.accepted ? 'accepted' : 'denied';
+        showNotification(`Friend request ${action}!`, 'success');
+    });
+
+    PulseChat.socket.on('user_blocked', (data) => {
+        showNotification('User blocked successfully!', 'success');
+        if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === data.userId) {
+            PulseChat.selectedFriend = null;
+            PulseChat.elements.userInfoPanel.classList.add('hidden');
+            PulseChat.elements.mobileUserHeader.classList.add('hidden');
+            PulseChat.elements.messagesContainer.innerHTML = `
+                <div class="empty-state">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <h3>Select a friend to view your conversation</h3>
+                </div>
+            `;
+            PulseChat.elements.chatTitle.textContent = 'Select a friend to start chatting';
+            disableInputs();
+        }
+    });
+
+    PulseChat.socket.on('user_unblocked', (data) => {
+        showNotification('User unblocked successfully!', 'success');
+    });
+
+    PulseChat.socket.on('user_muted', (data) => {
+        showNotification(`User muted successfully for ${data.duration}!`, 'success');
+    });
+
+    PulseChat.socket.on('user_banned', (data) => {
+        showNotification('User banned successfully!', 'success');
+        closeBanModal();
+    });
+
+    // Settings Events
+    PulseChat.socket.on('settings_updated', (settings) => {
+        showMessage('settingsMessage', 'Settings saved successfully!', 'success');
+        if (PulseChat.currentUser.settings) {
+            PulseChat.currentUser.settings = { ...PulseChat.currentUser.settings, ...settings };
+        } else {
+            PulseChat.currentUser.settings = settings;
+        }
+        setTimeout(() => {
+            closeSettings();
+        }, 1500);
+    });
+
+    PulseChat.socket.on('settings_error', (message) => {
+        showMessage('settingsMessage', message, 'error');
+    });
+
+    PulseChat.socket.on('logged_out', () => {
+        deleteCookie('pulsechat_session');
+        location.reload();
+    });
+}
 
 // ===== Tier Benefits Configuration =====
 const TIER_BENEFITS = {
@@ -470,218 +884,6 @@ function clearMessage(elementId) {
         element.innerHTML = '';
     }
 }
-
-// ===== Socket Event Handlers =====
-
-// Authentication Events
-PulseChat.socket.on('authenticated', (data) => {
-    PulseChat.currentUser = data.user;
-    hideModal(PulseChat.elements.loginModal);
-    hideModal(PulseChat.elements.autoLoginIndicator);
-    PulseChat.elements.mainApp.classList.remove('hidden');
-    
-    // Update user info display
-    PulseChat.elements.currentUsername.textContent = PulseChat.currentUser.username;
-    
-    // Show role badge if applicable
-    if (['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
-        const roleBadge = PulseChat.elements.userRole;
-        roleBadge.textContent = PulseChat.currentUser.role;
-        roleBadge.className = `role-badge ${PulseChat.currentUser.role}`;
-        roleBadge.classList.remove('hidden');
-    }
-    
-    // Update settings UI
-    if (PulseChat.currentUser.settings) {
-        PulseChat.elements.allowFriendRequests.checked = 
-            PulseChat.currentUser.settings.allowFriendRequests !== false;
-    }
-    
-    // Update profile tab if it's visible
-    if (PulseChat.currentSettingsTab === 'profile') {
-        updateProfileTab();
-    }
-});
-
-PulseChat.socket.on('session_token', (token) => {
-    setCookie('pulsechat_session', token, 30); // 30 days
-});
-
-PulseChat.socket.on('auth_error', (message) => {
-    hideModal(PulseChat.elements.autoLoginIndicator);
-    showMessage('authMessage', message, 'error');
-    deleteCookie('pulsechat_session');
-});
-
-PulseChat.socket.on('banned', (data) => {
-    alert(`You have been banned. Reason: ${data.reason}`);
-    deleteCookie('pulsechat_session');
-    location.reload();
-});
-
-PulseChat.socket.on('muted', (data) => {
-    showNotification(`You have been muted for ${data.duration}. Reason: ${data.reason}`, 'error');
-});
-
-// Friends Events
-PulseChat.socket.on('friends_list', (friendsList) => {
-    PulseChat.friends = friendsList;
-    renderFriendsList();
-    renderMobileFriendsList();
-});
-
-PulseChat.socket.on('friend_requests', (requests) => {
-    PulseChat.friendRequests = requests;
-    renderFriendRequests();
-    renderMobileFriendRequests();
-});
-
-PulseChat.socket.on('blocked_users', (blocked) => {
-    PulseChat.blockedUsers = blocked;
-    renderBlockedUsers();
-});
-
-PulseChat.socket.on('friend_request_received', (request) => {
-    PulseChat.friendRequests.push(request);
-    renderFriendRequests();
-    renderMobileFriendRequests();
-    showNotification(`New friend request from ${request.senderUsername}!`, 'info');
-});
-
-PulseChat.socket.on('friend_request_accepted', (data) => {
-    showNotification(`${data.username} accepted your friend request!`, 'success');
-});
-
-// Message Events
-PulseChat.socket.on('messages_loaded', (data) => {
-    if (PulseChat.selectedFriend && data.friendId === PulseChat.selectedFriend.friendId) {
-        PulseChat.messages = data.messages;
-        renderMessages();
-    }
-});
-
-PulseChat.socket.on('new_message', (message) => {
-    if (PulseChat.selectedFriend && 
-        (message.senderId === PulseChat.selectedFriend.friendId || message.receiverId === PulseChat.selectedFriend.friendId)) {
-        PulseChat.messages.push(message);
-        addMessageToChat(message);
-    }
-});
-
-PulseChat.socket.on('message_sent', (message) => {
-    PulseChat.messages.push(message);
-    addMessageToChat(message);
-});
-
-PulseChat.socket.on('message_deleted', (data) => {
-    // Remove from local messages array first
-    PulseChat.messages = PulseChat.messages.filter(m => m.id !== data.messageId);
-    
-    // Find and remove the message element
-    const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
-    if (messageElement) {
-        messageElement.style.opacity = '0';
-        messageElement.style.transform = 'translateY(-20px)';
-        setTimeout(() => {
-            if (messageElement.parentNode) {
-                messageElement.parentNode.removeChild(messageElement);
-            }
-            
-            // Check if container is now empty and show empty state if needed
-            const container = PulseChat.elements.messagesContainer;
-            const remainingMessages = container.querySelectorAll('.message');
-            if (remainingMessages.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                        </svg>
-                        <h3>No messages yet</h3>
-                        <p>Start your conversation!</p>
-                    </div>
-                `;
-            }
-        }, 300);
-    } else {
-        // If element not found, just re-render all messages to ensure consistency
-        renderMessages();
-    }
-});
-
-PulseChat.socket.on('message_error', (message) => {
-    showNotification(message, 'error');
-});
-
-// Friend Action Events
-PulseChat.socket.on('friend_request_sent', (request) => {
-    showMessage('friendMessage', 'Friend request sent!', 'success');
-    setTimeout(() => {
-        closeFriendsManagement();
-    }, 1500);
-});
-
-PulseChat.socket.on('friend_request_error', (message) => {
-    showMessage('friendMessage', message, 'error');
-});
-
-PulseChat.socket.on('friend_request_response_sent', (data) => {
-    const action = data.accepted ? 'accepted' : 'denied';
-    showNotification(`Friend request ${action}!`, 'success');
-});
-
-PulseChat.socket.on('user_blocked', (data) => {
-    showNotification('User blocked successfully!', 'success');
-    if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === data.userId) {
-        PulseChat.selectedFriend = null;
-        PulseChat.elements.userInfoPanel.classList.add('hidden');
-        PulseChat.elements.mobileUserHeader.classList.add('hidden');
-        PulseChat.elements.messagesContainer.innerHTML = `
-            <div class="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <h3>Select a friend to view your conversation</h3>
-            </div>
-        `;
-        PulseChat.elements.chatTitle.textContent = 'Select a friend to start chatting';
-        disableInputs();
-    }
-});
-
-PulseChat.socket.on('user_unblocked', (data) => {
-    showNotification('User unblocked successfully!', 'success');
-});
-
-PulseChat.socket.on('user_muted', (data) => {
-    showNotification(`User muted successfully for ${data.duration}!`, 'success');
-});
-
-PulseChat.socket.on('user_banned', (data) => {
-    showNotification('User banned successfully!', 'success');
-    closeBanModal();
-});
-
-// Settings Events
-PulseChat.socket.on('settings_updated', (settings) => {
-    showMessage('settingsMessage', 'Settings saved successfully!', 'success');
-    if (PulseChat.currentUser.settings) {
-        PulseChat.currentUser.settings = { ...PulseChat.currentUser.settings, ...settings };
-    } else {
-        PulseChat.currentUser.settings = settings;
-    }
-    setTimeout(() => {
-        closeSettings();
-    }, 1500);
-});
-
-PulseChat.socket.on('settings_error', (message) => {
-    showMessage('settingsMessage', message, 'error');
-});
-
-PulseChat.socket.on('logged_out', () => {
-    deleteCookie('pulsechat_session');
-    location.reload();
-});
 
 // ===== Authentication Functions =====
 
@@ -1115,7 +1317,7 @@ function addMessageToChat(message, scroll = true) {
                     <source src="/api/media/${message.content}" type="video/mp4">
                     <source src="/api/media/${message.content}" type="video/webm">
                     Your browser does not support the video tag.
-                </source>
+                </video>
             </div>
             ${actionsHtml}
         `;
@@ -1375,6 +1577,11 @@ window.addEventListener('resize', function() {
 // ===== Initialization =====
 
 window.addEventListener('load', () => {
+    // Initialize socket and visibility handling
+    initializeSocket();
+    setupVisibilityHandling();
+    
+    // Try auto-login
     checkAutoLogin();
 });
 
