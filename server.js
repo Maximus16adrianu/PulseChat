@@ -56,6 +56,7 @@ async function initializeDirectories() {
   const dirs = [
     'private',
     'private/messages',
+    'private/messages/chats',
     'private/messages/pictures',
     'private/messages/videos',
     'private/users',
@@ -76,7 +77,7 @@ async function initializeDirectories() {
   
   // Initialize JSON files if they don't exist
   const files = [
-    'private/messages/messages.json',
+    'private/messages/chats.json',
     'private/users/users.json',
     'private/friends/friends.json',
     'private/logins/logins.json',
@@ -177,76 +178,166 @@ async function getUserByUsername(username) {
   return users.find(u => u.username === username);
 }
 
+// Generate consistent chat ID for two users
+function generateChatId(user1Id, user2Id) {
+  // Sort IDs to ensure consistent chat ID regardless of order
+  const sortedIds = [user1Id, user2Id].sort();
+  return `${sortedIds[0]}_${sortedIds[1]}`;
+}
+
+// Chat management functions
+async function getChatInfo(chatId) {
+  const chats = await loadJSON('private/messages/chats.json');
+  return chats.find(chat => chat.id === chatId);
+}
+
+async function createChat(user1Id, user2Id) {
+  const chatId = generateChatId(user1Id, user2Id);
+  const chats = await loadJSON('private/messages/chats.json');
+  
+  // Check if chat already exists
+  const existingChat = chats.find(chat => chat.id === chatId);
+  if (existingChat) {
+    return existingChat;
+  }
+  
+  // Create new chat record
+  const newChat = {
+    id: chatId,
+    participants: [user1Id, user2Id],
+    created: Date.now(),
+    lastMessage: Date.now()
+  };
+  
+  chats.push(newChat);
+  await saveJSON('private/messages/chats.json', chats);
+  
+  // Create chat directory and file
+  const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
+  await fs.mkdir(chatDir, { recursive: true });
+  
+  const chatFile = path.join(chatDir, `${chatId}.json`);
+  await fs.writeFile(chatFile, JSON.stringify([], null, 2));
+  
+  return newChat;
+}
+
 async function getMessagesForUsers(user1Id, user2Id) {
-  const messages = await loadJSON('private/messages/messages.json');
-  return messages.filter(msg => 
-    (msg.senderId === user1Id && msg.receiverId === user2Id) ||
-    (msg.senderId === user2Id && msg.receiverId === user1Id)
-  ).sort((a, b) => a.timestamp - b.timestamp);
+  const chatId = generateChatId(user1Id, user2Id);
+  const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
+  
+  try {
+    const data = await fs.readFile(chatFile, 'utf8');
+    const messages = JSON.parse(data);
+    return messages.sort((a, b) => a.timestamp - b.timestamp);
+  } catch (error) {
+    // Chat doesn't exist yet, return empty array
+    return [];
+  }
+}
+
+async function saveMessageToChat(user1Id, user2Id, message) {
+  const chatId = generateChatId(user1Id, user2Id);
+  
+  // Ensure chat exists
+  await createChat(user1Id, user2Id);
+  
+  // Load existing messages
+  const messages = await getMessagesForUsers(user1Id, user2Id);
+  
+  // Add new message
+  messages.push(message);
+  
+  // Save messages back to chat file
+  const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
+  await fs.writeFile(chatFile, JSON.stringify(messages, null, 2));
+  
+  // Update last message time in chats.json
+  const chats = await loadJSON('private/messages/chats.json');
+  const chatIndex = chats.findIndex(chat => chat.id === chatId);
+  if (chatIndex !== -1) {
+    chats[chatIndex].lastMessage = Date.now();
+    await saveJSON('private/messages/chats.json', chats);
+  }
 }
 
 async function deleteMessagesForUsers(user1Id, user2Id) {
-  const messages = await loadJSON('private/messages/messages.json');
+  const chatId = generateChatId(user1Id, user2Id);
+  const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
   
-  // Get messages to delete (to also delete their files)
-  const messagesToDelete = messages.filter(msg => 
-    (msg.senderId === user1Id && msg.receiverId === user2Id) ||
-    (msg.senderId === user2Id && msg.receiverId === user1Id)
-  );
-  
-  // Delete actual files
-  for (const message of messagesToDelete) {
-    if (message.type === 'image' || message.type === 'video') {
-      try {
-        const filePath = message.type === 'image' 
-          ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-          : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-        await fs.unlink(filePath);
-        console.log(`Deleted file: ${filePath}`);
-      } catch (error) {
-        console.log(`Could not delete file ${message.content}:`, error.message);
+  try {
+    // Get all messages first to delete associated files
+    const messages = await getMessagesForUsers(user1Id, user2Id);
+    
+    // Delete associated files (images/videos)
+    for (const message of messages) {
+      if (message.type === 'image' || message.type === 'video') {
+        try {
+          const filePath = message.type === 'image' 
+            ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+            : path.join(__dirname, 'private', 'messages', 'videos', message.content);
+          await fs.unlink(filePath);
+          console.log(`Deleted file: ${filePath}`);
+        } catch (error) {
+          console.log(`Could not delete file ${message.content}:`, error.message);
+        }
       }
     }
+    
+    // Delete the entire chat directory
+    await fs.rmdir(chatDir, { recursive: true });
+    console.log(`Deleted chat directory: ${chatDir}`);
+    
+    // Remove chat from chats.json
+    const chats = await loadJSON('private/messages/chats.json');
+    const filteredChats = chats.filter(chat => chat.id !== chatId);
+    await saveJSON('private/messages/chats.json', filteredChats);
+    
+  } catch (error) {
+    console.error(`Error deleting chat ${chatId}:`, error);
   }
-  
-  // Filter out the messages
-  const filteredMessages = messages.filter(msg => 
-    !((msg.senderId === user1Id && msg.receiverId === user2Id) ||
-      (msg.senderId === user2Id && msg.receiverId === user1Id))
-  );
-  
-  await saveJSON('private/messages/messages.json', filteredMessages);
 }
 
 async function deleteMessageById(messageId) {
-  const messages = await loadJSON('private/messages/messages.json');
-  const messageIndex = messages.findIndex(msg => msg.id === messageId);
+  const chats = await loadJSON('private/messages/chats.json');
   
-  if (messageIndex === -1) {
-    return { success: false, error: 'Message not found' };
-  }
-  
-  const message = messages[messageIndex];
-  
-  // Delete file if it's an image or video
-  if (message.type === 'image' || message.type === 'video') {
+  // Search through all chats to find the message
+  for (const chat of chats) {
+    const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chat.id, `${chat.id}.json`);
+    
     try {
-      const filePath = message.type === 'image' 
-        ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-        : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-      await fs.unlink(filePath);
-      console.log(`Deleted file: ${filePath}`);
+      const messages = JSON.parse(await fs.readFile(chatFile, 'utf8'));
+      const messageIndex = messages.findIndex(msg => msg.id === messageId);
+      
+      if (messageIndex !== -1) {
+        const message = messages[messageIndex];
+        
+        // Delete file if it's an image or video
+        if (message.type === 'image' || message.type === 'video') {
+          try {
+            const filePath = message.type === 'image' 
+              ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+              : path.join(__dirname, 'private', 'messages', 'videos', message.content);
+            await fs.unlink(filePath);
+            console.log(`Deleted file: ${filePath}`);
+          } catch (error) {
+            console.error(`Error deleting file ${message.content}:`, error);
+          }
+        }
+        
+        // Remove message from array
+        messages.splice(messageIndex, 1);
+        await fs.writeFile(chatFile, JSON.stringify(messages, null, 2));
+        
+        return { success: true, message };
+      }
     } catch (error) {
-      console.error(`Error deleting file ${message.content}:`, error);
-      // Continue with message deletion even if file deletion fails
+      // Chat file doesn't exist or is corrupted, continue to next chat
+      continue;
     }
   }
   
-  // Remove message from array
-  messages.splice(messageIndex, 1);
-  await saveJSON('private/messages/messages.json', messages);
-  
-  return { success: true, message };
+  return { success: false, error: 'Message not found' };
 }
 
 async function getFriendshipDetails(user1Id, user2Id) {
@@ -740,22 +831,30 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Get the message first to check permissions
-      const messages = await loadJSON('private/messages/messages.json');
-      const message = messages.find(m => m.id === messageId);
+      // Find the message first to check permissions
+      const chats = await loadJSON('private/messages/chats.json');
+      let foundMessage = null;
+      let messageSender = null;
       
-      if (!message) {
+      for (const chat of chats) {
+        const messages = await getMessagesForUsers(chat.participants[0], chat.participants[1]);
+        const message = messages.find(m => m.id === messageId);
+        if (message) {
+          foundMessage = message;
+          messageSender = await getUserById(message.senderId);
+          break;
+        }
+      }
+      
+      if (!foundMessage) {
         socket.emit('message_error', 'Message not found');
         return;
       }
       
-      // Get the message sender to check their role
-      const messageSender = await getUserById(message.senderId);
-      
       // Check if user can delete this message
       let canDelete = false;
       
-      if (message.senderId === socket.userId) {
+      if (foundMessage.senderId === socket.userId) {
         // Users can always delete their own messages
         canDelete = true;
       } else if (currentUser.role === 'owner') {
@@ -776,8 +875,8 @@ io.on('connection', (socket) => {
       
       if (result.success) {
         // Notify both users about the deletion
-        const senderId = message.senderId;
-        const receiverId = message.receiverId;
+        const senderId = foundMessage.senderId;
+        const receiverId = foundMessage.receiverId;
         
         const senderSocket = getSocketByUserId(senderId);
         const receiverSocket = getSocketByUserId(receiverId);
@@ -842,8 +941,7 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Save message
-      const messages = await loadJSON('private/messages/messages.json');
+      // Create message
       const message = {
         id: generateUserId(),
         senderId: socket.userId,
@@ -853,8 +951,8 @@ io.on('connection', (socket) => {
         timestamp: Date.now()
       };
       
-      messages.push(message);
-      await saveJSON('private/messages/messages.json', messages);
+      // Save message to chat
+      await saveMessageToChat(socket.userId, receiverId, message);
       
       // Send to receiver if online
       const receiverSocket = getSocketByUserId(receiverId);
@@ -1033,7 +1131,7 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
-      // Delete all messages between the users immediately (including files)
+      // Delete all messages between the users immediately (including files and chat folder)
       await deleteMessagesForUsers(socket.userId, targetUserId);
       
       // Find existing relationship
@@ -1377,8 +1475,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     await fs.writeFile(savedFilePath, req.file.buffer);
     
-    // Save message record
-    const messages = await loadJSON('private/messages/messages.json');
+    // Create message record
     const message = {
       id: generateUserId(),
       senderId: userId,
@@ -1388,8 +1485,8 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       timestamp: Date.now()
     };
     
-    messages.push(message);
-    await saveJSON('private/messages/messages.json', messages);
+    // Save message to chat
+    await saveMessageToChat(userId, receiverId, message);
     
     // Send real-time message to both sender and receiver
     const senderSocket = getSocketByUserId(userId);
