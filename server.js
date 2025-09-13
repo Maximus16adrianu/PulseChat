@@ -493,6 +493,7 @@ async function unbanUser(userId) {
 async function sendUpdatedUserLists(socket, userId) {
   try {
     const friends = await loadJSON('private/friends/friends.json');
+    const chats = await loadJSON('private/messages/chats.json');
     
     // Update friends list
     const userFriends = friends.filter(f => 
@@ -503,16 +504,26 @@ async function sendUpdatedUserLists(socket, userId) {
       userFriends.map(async (friendship) => {
         const friendId = friendship.user1 === userId ? friendship.user2 : friendship.user1;
         const friendUser = await getUserById(friendId);
+        
+        // Find the chat for this friendship to get lastMessage timestamp
+        const chatId = generateChatId(userId, friendId);
+        const chat = chats.find(c => c.id === chatId);
+        const lastMessage = chat ? chat.lastMessage : 0;
+        
         return {
           ...friendship,
           friendId,
           friendUsername: friendUser ? friendUser.username : 'Unknown User',
           friendRole: friendUser ? friendUser.role : 'user',
           friendTier: friendUser ? getUserTier(friendUser) : 1,
-          friendsSince: friendship.acceptedAt || friendship.timestamp
+          friendsSince: friendship.acceptedAt || friendship.timestamp,
+          lastMessage
         };
       })
     );
+    
+    // Sort friends by lastMessage (most recent first)
+    userFriendsWithDetails.sort((a, b) => b.lastMessage - a.lastMessage);
     
     // Update blocked list
     const blockedUsers = friends.filter(f => 
@@ -738,27 +749,38 @@ io.on('connection', (socket) => {
       socket.userId = user.id;
       socket.emit('authenticated', { user: { ...user, password: undefined } });
       
-      // Load and send friends list with full user details
+      // Load and send friends list with full user details - SORTED BY LAST MESSAGE
       const friends = await loadJSON('private/friends/friends.json');
+      const chats = await loadJSON('private/messages/chats.json');
       const userFriends = friends.filter(f => 
         (f.user1 === user.id || f.user2 === user.id) && f.status === 'accepted'
       );
       
-      // Populate friend details
+      // Populate friend details with lastMessage for sorting
       const friendsWithDetails = await Promise.all(
         userFriends.map(async (friendship) => {
           const friendId = friendship.user1 === user.id ? friendship.user2 : friendship.user1;
           const friendUser = await getUserById(friendId);
+          
+          // Find the chat for this friendship to get lastMessage timestamp
+          const chatId = generateChatId(user.id, friendId);
+          const chat = chats.find(c => c.id === chatId);
+          const lastMessage = chat ? chat.lastMessage : 0;
+          
           return {
             ...friendship,
             friendId,
             friendUsername: friendUser ? friendUser.username : 'Unknown User',
             friendRole: friendUser ? friendUser.role : 'user',
             friendTier: friendUser ? getUserTier(friendUser) : 1,
-            friendsSince: friendship.acceptedAt || friendship.timestamp
+            friendsSince: friendship.acceptedAt || friendship.timestamp,
+            lastMessage
           };
         })
       );
+      
+      // Sort friends by lastMessage (most recent first)
+      friendsWithDetails.sort((a, b) => b.lastMessage - a.lastMessage);
       
       // Load pending friend requests
       const pendingRequests = friends.filter(f => 
