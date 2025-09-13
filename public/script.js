@@ -27,6 +27,7 @@ const PulseChat = {
     currentCall: null,
     localStream: null,
     peerConnection: null,
+    iceCandidateQueue: [], // Queue for early ICE candidates
     callTimer: null,
     callStartTime: null,
     isCallMuted: false,
@@ -158,19 +159,25 @@ const PulseChat = {
 
 // ===== Voice Calling Functions =====
 
-// WebRTC Configuration
+// WebRTC Configuration - Multiple STUN servers for better connectivity
 const rtcConfiguration = {
     iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
     ]
 };
 
-function setupWebRTC() {
+async function setupWebRTC() {
+    console.log('Setting up WebRTC peer connection');
+    
     PulseChat.peerConnection = new RTCPeerConnection(rtcConfiguration);
+    PulseChat.iceCandidateQueue = []; // Queue for early ICE candidates
     
     // Handle ICE candidates
     PulseChat.peerConnection.onicecandidate = (event) => {
         if (event.candidate && PulseChat.currentCall) {
+            console.log('Sending ICE candidate');
             PulseChat.socket.emit('webrtc_ice_candidate', {
                 callId: PulseChat.currentCall.id,
                 candidate: event.candidate
@@ -180,25 +187,67 @@ function setupWebRTC() {
     
     // Handle remote stream
     PulseChat.peerConnection.ontrack = (event) => {
+        console.log('Received remote audio stream');
+        
+        // Remove any existing remote audio
+        const existingAudio = document.getElementById('remoteAudio');
+        if (existingAudio) {
+            existingAudio.remove();
+        }
+        
+        // Create new remote audio element
         const remoteAudio = document.createElement('audio');
+        remoteAudio.id = 'remoteAudio';
         remoteAudio.srcObject = event.streams[0];
         remoteAudio.autoplay = true;
-        remoteAudio.id = 'remoteAudio';
+        remoteAudio.volume = 1.0;
+        
+        // Ensure audio plays
+        remoteAudio.addEventListener('loadedmetadata', () => {
+            remoteAudio.play().catch(error => {
+                console.error('Error playing remote audio:', error);
+                // Try to play again after user interaction
+                document.addEventListener('click', () => {
+                    remoteAudio.play().catch(console.error);
+                }, { once: true });
+            });
+        });
+        
         document.body.appendChild(remoteAudio);
     };
     
     // Handle connection state changes
     PulseChat.peerConnection.onconnectionstatechange = () => {
         console.log('WebRTC connection state:', PulseChat.peerConnection.connectionState);
+        
         if (PulseChat.peerConnection.connectionState === 'connected') {
             updateCallStatus('Connected');
+            console.log('WebRTC connection established successfully');
         } else if (PulseChat.peerConnection.connectionState === 'disconnected' || 
                    PulseChat.peerConnection.connectionState === 'failed') {
+            console.log('WebRTC connection failed or disconnected');
             if (PulseChat.currentCall) {
                 endCall();
             }
         }
     };
+    
+    // Get user media and add to peer connection
+    try {
+        console.log('Requesting user media');
+        const stream = await getUserMedia();
+        
+        // Add all tracks to peer connection
+        stream.getTracks().forEach(track => {
+            console.log('Adding local track to peer connection');
+            PulseChat.peerConnection.addTrack(track, stream);
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('Failed to setup WebRTC:', error);
+        throw error;
+    }
 }
 
 async function getUserMedia() {
@@ -207,15 +256,19 @@ async function getUserMedia() {
             audio: {
                 echoCancellation: true,
                 noiseSuppression: true,
-                autoGainControl: true
+                autoGainControl: true,
+                sampleRate: 48000,
+                channelCount: 1
             }, 
             video: false 
         });
+        
         PulseChat.localStream = stream;
+        console.log('Got user media successfully');
         return stream;
     } catch (error) {
         console.error('Error accessing media devices:', error);
-        throw new Error('Could not access microphone. Please check permissions.');
+        throw new Error('Could not access microphone. Please check permissions and try again.');
     }
 }
 
@@ -230,6 +283,8 @@ function initiateCall() {
         return;
     }
     
+    console.log('Initiating call to:', PulseChat.selectedFriend.friendUsername);
+    
     PulseChat.socket.emit('initiate_call', {
         friendId: PulseChat.selectedFriend.friendId
     });
@@ -237,6 +292,8 @@ function initiateCall() {
 
 function answerCall(accept) {
     if (!PulseChat.currentCall) return;
+    
+    console.log('Answering call:', accept);
     
     PulseChat.socket.emit('answer_call', {
         callId: PulseChat.currentCall.id,
@@ -260,6 +317,8 @@ function endCall() {
 }
 
 function cleanupCall() {
+    console.log('Cleaning up call');
+    
     // Stop call timer
     if (PulseChat.callTimer) {
         clearInterval(PulseChat.callTimer);
@@ -268,20 +327,28 @@ function cleanupCall() {
     
     // Clean up WebRTC
     if (PulseChat.localStream) {
-        PulseChat.localStream.getTracks().forEach(track => track.stop());
+        PulseChat.localStream.getTracks().forEach(track => {
+            track.stop();
+            console.log('Stopped local track');
+        });
         PulseChat.localStream = null;
     }
     
     if (PulseChat.peerConnection) {
         PulseChat.peerConnection.close();
         PulseChat.peerConnection = null;
+        console.log('Closed peer connection');
     }
     
     // Remove remote audio element
     const remoteAudio = document.getElementById('remoteAudio');
     if (remoteAudio) {
         remoteAudio.remove();
+        console.log('Removed remote audio element');
     }
+    
+    // Clear ICE candidate queue
+    PulseChat.iceCandidateQueue = [];
     
     // Reset call state
     PulseChat.currentCall = null;
@@ -295,6 +362,9 @@ function cleanupCall() {
     
     // Reset call button states
     updateCallButtonStates();
+    updateCallAvailability();
+    
+    console.log('Call cleanup completed');
 }
 
 function toggleMute() {
@@ -955,24 +1025,26 @@ function setupSocketHandlers() {
         updateCallAvailability();
     });
     
+    // Fixed WebRTC Socket Handlers
     PulseChat.socket.on('call_answered', async (data) => {
         if (!PulseChat.currentCall || PulseChat.currentCall.id !== data.callId) return;
         
         try {
+            console.log('Call was answered, setting up WebRTC as caller');
             updateCallStatus('Connecting...');
             
-            // Get user media and setup WebRTC
-            await getUserMedia();
-            setupWebRTC();
-            
-            // Add local stream to peer connection
-            PulseChat.localStream.getTracks().forEach(track => {
-                PulseChat.peerConnection.addTrack(track, PulseChat.localStream);
-            });
+            // Setup WebRTC (gets media and creates peer connection)
+            await setupWebRTC();
             
             // Create and send offer
-            const offer = await PulseChat.peerConnection.createOffer();
+            console.log('Creating offer');
+            const offer = await PulseChat.peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: false
+            });
+            
             await PulseChat.peerConnection.setLocalDescription(offer);
+            console.log('Sending offer');
             
             PulseChat.socket.emit('webrtc_offer', {
                 callId: data.callId,
@@ -990,14 +1062,10 @@ function setupSocketHandlers() {
         if (!PulseChat.currentCall || PulseChat.currentCall.id !== data.callId) return;
         
         try {
-            // Get user media and setup WebRTC for incoming call
-            await getUserMedia();
-            setupWebRTC();
+            console.log('Connected to call, setting up WebRTC as receiver');
             
-            // Add local stream to peer connection
-            PulseChat.localStream.getTracks().forEach(track => {
-                PulseChat.peerConnection.addTrack(track, PulseChat.localStream);
-            });
+            // Setup WebRTC (gets media and creates peer connection)
+            await setupWebRTC();
             
             // Show call overlay if not already shown
             if (PulseChat.elements.activeCallOverlay.classList.contains('hidden')) {
@@ -1006,10 +1074,7 @@ function setupSocketHandlers() {
                 PulseChat.elements.activeCallOverlay.classList.remove('hidden');
             }
             
-            updateCallStatus('Connected');
-            startCallTimer();
-            PulseChat.elements.callTimeRemaining.classList.remove('hidden');
-            
+            updateCallStatus('Waiting for connection...');
             updateCallAvailability();
             
         } catch (error) {
@@ -1059,16 +1124,35 @@ function setupSocketHandlers() {
         updateCallTimeDisplay(data.remainingTime);
     });
     
-    // WebRTC signaling events
+    // WebRTC signaling events - Fixed handlers
     PulseChat.socket.on('webrtc_offer', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) return;
+        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
+            console.log('Received offer but no current call or peer connection');
+            return;
+        }
         
         try {
-            await PulseChat.peerConnection.setRemoteDescription(data.offer);
+            console.log('Received WebRTC offer');
             
+            // Set remote description
+            await PulseChat.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            console.log('Set remote description from offer');
+            
+            // Process any queued ICE candidates
+            if (PulseChat.iceCandidateQueue) {
+                console.log('Processing queued ICE candidates:', PulseChat.iceCandidateQueue.length);
+                for (const candidate of PulseChat.iceCandidateQueue) {
+                    await PulseChat.peerConnection.addIceCandidate(candidate);
+                }
+                PulseChat.iceCandidateQueue = [];
+            }
+            
+            // Create and send answer
+            console.log('Creating answer');
             const answer = await PulseChat.peerConnection.createAnswer();
             await PulseChat.peerConnection.setLocalDescription(answer);
             
+            console.log('Sending answer');
             PulseChat.socket.emit('webrtc_answer', {
                 callId: data.callId,
                 answer: answer
@@ -1081,10 +1165,27 @@ function setupSocketHandlers() {
     });
     
     PulseChat.socket.on('webrtc_answer', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) return;
+        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
+            console.log('Received answer but no current call or peer connection');
+            return;
+        }
         
         try {
-            await PulseChat.peerConnection.setRemoteDescription(data.answer);
+            console.log('Received WebRTC answer');
+            
+            // Set remote description
+            await PulseChat.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            console.log('Set remote description from answer');
+            
+            // Process any queued ICE candidates
+            if (PulseChat.iceCandidateQueue) {
+                console.log('Processing queued ICE candidates:', PulseChat.iceCandidateQueue.length);
+                for (const candidate of PulseChat.iceCandidateQueue) {
+                    await PulseChat.peerConnection.addIceCandidate(candidate);
+                }
+                PulseChat.iceCandidateQueue = [];
+            }
+            
             updateCallStatus('Connected');
             startCallTimer();
             PulseChat.elements.callTimeRemaining.classList.remove('hidden');
@@ -1096,10 +1197,26 @@ function setupSocketHandlers() {
     });
     
     PulseChat.socket.on('webrtc_ice_candidate', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) return;
+        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
+            console.log('Received ICE candidate but no current call or peer connection');
+            return;
+        }
         
         try {
-            await PulseChat.peerConnection.addIceCandidate(data.candidate);
+            const candidate = new RTCIceCandidate(data.candidate);
+            
+            // Check if we have remote description set
+            if (PulseChat.peerConnection.remoteDescription) {
+                console.log('Adding ICE candidate immediately');
+                await PulseChat.peerConnection.addIceCandidate(candidate);
+            } else {
+                console.log('Queueing ICE candidate (no remote description yet)');
+                if (!PulseChat.iceCandidateQueue) {
+                    PulseChat.iceCandidateQueue = [];
+                }
+                PulseChat.iceCandidateQueue.push(candidate);
+            }
+            
         } catch (error) {
             console.error('Error adding ICE candidate:', error);
         }
@@ -2392,9 +2509,26 @@ if (PulseChat.elements.speakerBtn) {
     PulseChat.elements.speakerBtn.addEventListener('click', toggleSpeaker);
 }
 
+if (PulseChat.elements.endCallBtn) {
+    PulseChat.elements.endCallBtn.addEventListener('click', endCall);
+}
+
+if (PulseChat.elements.callBtn) {
+    PulseChat.elements.callBtn.addEventListener('click', initiateCall);
+}
+
+if (PulseChat.elements.mobileCallBtn) {
+    PulseChat.elements.mobileCallBtn.addEventListener('click', initiateCall);
+}
+
 // Mobile Navigation Event Listeners
 PulseChat.elements.mobileMenuBtn.addEventListener('click', openMobileNav);
 PulseChat.elements.mobileNavClose.addEventListener('click', closeMobileNav);
+
+// Mobile user header click
+if (PulseChat.elements.mobileUserHeader) {
+    PulseChat.elements.mobileUserHeader.addEventListener('click', showMobileUserInfo);
+}
 
 // Mobile navigation backdrop click
 document.addEventListener('click', function(e) {
