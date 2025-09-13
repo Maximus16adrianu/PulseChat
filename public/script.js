@@ -121,6 +121,66 @@ const PulseChat = {
     }
 };
 
+// ===== Friends List Reordering Functions =====
+
+function moveSelectedFriendToTop() {
+    if (!PulseChat.selectedFriend || PulseChat.friends.length <= 1) return;
+    
+    const friendIndex = PulseChat.friends.findIndex(
+        friend => friend.friendId === PulseChat.selectedFriend.friendId
+    );
+    
+    if (friendIndex > 0) { // Only move if not already at top
+        // Remove friend from current position
+        const friendToMove = PulseChat.friends.splice(friendIndex, 1)[0];
+        
+        // Add to beginning of array
+        PulseChat.friends.unshift(friendToMove);
+        
+        // Re-render both lists
+        renderFriendsList();
+        renderMobileFriendsList();
+    }
+}
+
+function moveFriendToTopByMessage(message) {
+    if (PulseChat.friends.length <= 1) return;
+    
+    // Determine which friend to move based on the message
+    let friendIdToMove = null;
+    
+    if (message.senderId === PulseChat.currentUser.id) {
+        // We sent the message, move the receiver to top
+        friendIdToMove = message.receiverId;
+    } else {
+        // We received the message, move the sender to top
+        friendIdToMove = message.senderId;
+    }
+    
+    if (!friendIdToMove) return;
+    
+    const friendIndex = PulseChat.friends.findIndex(
+        friend => friend.friendId === friendIdToMove
+    );
+    
+    if (friendIndex > 0) { // Only move if not already at top
+        // Remove friend from current position
+        const friendToMove = PulseChat.friends.splice(friendIndex, 1)[0];
+        
+        // Add to beginning of array
+        PulseChat.friends.unshift(friendToMove);
+        
+        // Re-render both lists
+        renderFriendsList();
+        renderMobileFriendsList();
+        
+        // Update selectedFriend reference if it was moved
+        if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === friendIdToMove) {
+            PulseChat.selectedFriend = friendToMove;
+        }
+    }
+}
+
 // ===== Connection Recovery System =====
 
 function createReconnectOverlay() {
@@ -407,11 +467,17 @@ function setupSocketHandlers() {
             PulseChat.messages.push(message);
             addMessageToChat(message);
         }
+        
+        // Move the friend involved in this message to the top of the list
+        moveFriendToTopByMessage(message);
     });
 
     PulseChat.socket.on('message_sent', (message) => {
         PulseChat.messages.push(message);
         addMessageToChat(message);
+        
+        // Move the friend we just messaged to the top of the list
+        moveFriendToTopByMessage(message);
     });
 
     PulseChat.socket.on('message_deleted', (data) => {
