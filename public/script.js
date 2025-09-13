@@ -13,6 +13,9 @@ const PulseChat = {
     userToBan: null,
     currentSettingsTab: 'profile',
     
+    // Message input focus detection for notifications
+    isMessageInputFocused: false,
+    
     // Connection state tracking
     connectionState: {
         wasBackgrounded: false,
@@ -22,6 +25,9 @@ const PulseChat = {
     
     // UI Elements Cache
     elements: {
+        // Audio elements
+        notificationSound: null, // Will be created dynamically
+        
         // Mobile Navigation
         mobileNavOverlay: document.getElementById('mobileNavOverlay'),
         mobileMenuBtn: document.getElementById('mobileMenuBtn'),
@@ -94,6 +100,7 @@ const PulseChat = {
         regPassword: document.getElementById('regPassword'),
         friendUsername: document.getElementById('friendUsername'),
         allowFriendRequests: document.getElementById('allowFriendRequests'),
+        allowNotifications: document.getElementById('allowNotifications'),
         banReason: document.getElementById('banReason'),
         muteDuration: document.getElementById('muteDuration'),
         
@@ -105,7 +112,7 @@ const PulseChat = {
         
         // Settings Tab Elements
         profileTab: document.getElementById('profileTab'),
-        privacyTab: document.getElementById('privacyTab'),
+        preferencesTab: document.getElementById('preferencesTab'),
         aboutTab: document.getElementById('aboutTab'),
         
         // Message displays
@@ -120,6 +127,178 @@ const PulseChat = {
         notificationContainer: document.getElementById('notificationContainer')
     }
 };
+
+// ===== Message Input Focus Detection =====
+
+function setupMessageInputFocusDetection() {
+    const messageInput = PulseChat.elements.messageInput;
+    
+    if (messageInput) {
+        messageInput.addEventListener('focus', function() {
+            PulseChat.isMessageInputFocused = true;
+        });
+        
+        messageInput.addEventListener('blur', function() {
+            PulseChat.isMessageInputFocused = false;
+        });
+    }
+}
+
+// ===== Notification Sound Functions =====
+
+function createNotificationSound() {
+    const audio = document.createElement('audio');
+    audio.src = '/sounds/notification.mp3';
+    audio.preload = 'auto';
+    PulseChat.elements.notificationSound = audio;
+}
+
+function playNotificationSound() {
+    // Only play if notifications are enabled and message input is not focused
+    if (!PulseChat.currentUser || 
+        !PulseChat.currentUser.settings || 
+        PulseChat.currentUser.settings.allowNotifications === false ||
+        PulseChat.isMessageInputFocused) {
+        return;
+    }
+    
+    try {
+        if (PulseChat.elements.notificationSound) {
+            // Reset audio to beginning and play
+            PulseChat.elements.notificationSound.currentTime = 0;
+            PulseChat.elements.notificationSound.play().catch(error => {
+                // Ignore play errors (user hasn't interacted with page yet, etc.)
+                console.log('Could not play notification sound:', error);
+            });
+        }
+    } catch (error) {
+        console.log('Error playing notification sound:', error);
+    }
+}
+
+// ===== Security Functions =====
+
+// Enhanced HTML escaping with additional security measures
+function escapeHtml(text) {
+    if (text === null || text === undefined) {
+        return '';
+    }
+    
+    // Convert to string if not already
+    const str = String(text);
+    
+    // Use textContent approach for basic escaping
+    const div = document.createElement('div');
+    div.textContent = str;
+    let escaped = div.innerHTML;
+    
+    // Additional escaping for common XSS vectors
+    escaped = escaped
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;');
+    
+    return escaped;
+}
+
+// Sanitize and validate user input
+function sanitizeInput(input, maxLength = 1000) {
+    if (typeof input !== 'string') {
+        return '';
+    }
+    
+    // Trim whitespace
+    let sanitized = input.trim();
+    
+    // Limit length to prevent potential DoS
+    if (sanitized.length > maxLength) {
+        sanitized = sanitized.substring(0, maxLength);
+    }
+    
+    // Remove any null bytes or control characters except newlines and tabs
+    sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    
+    return sanitized;
+}
+
+// Create safe text node (never executes scripts)
+function createSafeTextNode(text) {
+    const sanitized = sanitizeInput(text);
+    return document.createTextNode(sanitized);
+}
+
+// Safe way to set text content
+function setSafeTextContent(element, text) {
+    if (!element) return;
+    
+    // Clear any existing content
+    element.textContent = '';
+    
+    // Add sanitized text
+    const sanitized = sanitizeInput(text);
+    element.textContent = sanitized;
+}
+
+// Safe way to set HTML content with escaped user data
+function setSafeHTML(element, htmlTemplate, userDataReplacements = {}) {
+    if (!element) return;
+    
+    let safeHTML = htmlTemplate;
+    
+    // Replace all user data placeholders with escaped content
+    for (const [placeholder, userData] of Object.entries(userDataReplacements)) {
+        const escapedData = escapeHtml(userData);
+        safeHTML = safeHTML.replace(new RegExp(placeholder, 'g'), escapedData);
+    }
+    
+    element.innerHTML = safeHTML;
+}
+
+// Validate and sanitize message content
+function sanitizeMessage(content) {
+    const sanitized = sanitizeInput(content, 5000); // Max 5000 chars for messages
+    
+    // Additional validation for message content
+    if (sanitized.length === 0) {
+        return null;
+    }
+    
+    // Check for suspicious patterns that might indicate script injection attempts
+    const suspiciousPatterns = [
+        /<script/i,
+        /javascript:/i,
+        /on\w+\s*=/i,
+        /<iframe/i,
+        /<object/i,
+        /<embed/i,
+        /<link/i,
+        /<meta/i,
+        /data:text\/html/i,
+        /vbscript:/i
+    ];
+    
+    for (const pattern of suspiciousPatterns) {
+        if (pattern.test(sanitized)) {
+            console.warn('Suspicious content detected and filtered');
+            // Return sanitized version with suspicious content removed
+            return sanitized.replace(pattern, '[FILTERED]');
+        }
+    }
+    
+    return sanitized;
+}
+
+// Safe URL validation for media content
+function isValidMediaUrl(url) {
+    try {
+        const urlObj = new URL(url, window.location.origin);
+        // Only allow same-origin URLs for media
+        return urlObj.origin === window.location.origin && 
+               urlObj.pathname.startsWith('/api/media/');
+    } catch {
+        return false;
+    }
+}
 
 // ===== Friends List Reordering Functions =====
 
@@ -364,21 +543,15 @@ function setupSocketHandlers() {
         hideReconnectOverlay();
         PulseChat.elements.mainApp.classList.remove('hidden');
         
-        // Update user info display
-        PulseChat.elements.currentUsername.textContent = PulseChat.currentUser.username;
+        // Update user info display safely
+        setSafeTextContent(PulseChat.elements.currentUsername, PulseChat.currentUser.username);
         
         // Show role badge if applicable
         if (['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
             const roleBadge = PulseChat.elements.userRole;
-            roleBadge.textContent = PulseChat.currentUser.role;
-            roleBadge.className = `role-badge ${PulseChat.currentUser.role}`;
+            setSafeTextContent(roleBadge, PulseChat.currentUser.role);
+            roleBadge.className = `role-badge ${escapeHtml(PulseChat.currentUser.role)}`;
             roleBadge.classList.remove('hidden');
-        }
-        
-        // Update settings UI
-        if (PulseChat.currentUser.settings) {
-            PulseChat.elements.allowFriendRequests.checked = 
-                PulseChat.currentUser.settings.allowFriendRequests !== false;
         }
         
         // Update profile tab if it's visible
@@ -397,7 +570,7 @@ function setupSocketHandlers() {
                 <h3>Select a friend to view your conversation</h3>
             </div>
         `;
-        PulseChat.elements.chatTitle.textContent = 'Select a friend to start chatting';
+        setSafeTextContent(PulseChat.elements.chatTitle, 'Select a friend to start chatting');
         disableInputs();
     });
 
@@ -415,13 +588,16 @@ function setupSocketHandlers() {
     });
 
     PulseChat.socket.on('banned', (data) => {
-        alert(`You have been banned. Reason: ${data.reason}`);
+        const sanitizedReason = sanitizeInput(data.reason || 'No reason provided');
+        alert(`You have been banned. Reason: ${sanitizedReason}`);
         deleteCookie('pulsechat_session');
         location.reload();
     });
 
     PulseChat.socket.on('muted', (data) => {
-        showNotification(`You have been muted for ${data.duration}. Reason: ${data.reason}`, 'error');
+        const sanitizedDuration = sanitizeInput(data.duration || 'indefinite');
+        const sanitizedReason = sanitizeInput(data.reason || 'No reason provided');
+        showNotification(`You have been muted for ${sanitizedDuration}. Reason: ${sanitizedReason}`, 'error');
     });
 
     // Friends Events
@@ -446,11 +622,13 @@ function setupSocketHandlers() {
         PulseChat.friendRequests.push(request);
         renderFriendRequests();
         renderMobileFriendRequests();
-        showNotification(`New friend request from ${request.senderUsername}!`, 'info');
+        const sanitizedUsername = sanitizeInput(request.senderUsername);
+        showNotification(`New friend request from ${sanitizedUsername}!`, 'info');
     });
 
     PulseChat.socket.on('friend_request_accepted', (data) => {
-        showNotification(`${data.username} accepted your friend request!`, 'success');
+        const sanitizedUsername = sanitizeInput(data.username);
+        showNotification(`${sanitizedUsername} accepted your friend request!`, 'success');
     });
 
     // Message Events
@@ -466,6 +644,11 @@ function setupSocketHandlers() {
             (message.senderId === PulseChat.selectedFriend.friendId || message.receiverId === PulseChat.selectedFriend.friendId)) {
             PulseChat.messages.push(message);
             addMessageToChat(message);
+        }
+        
+        // Play notification sound for received messages
+        if (message.senderId !== PulseChat.currentUser.id) {
+            playNotificationSound();
         }
         
         // Move the friend involved in this message to the top of the list
@@ -484,8 +667,9 @@ function setupSocketHandlers() {
         // Remove from local messages array first
         PulseChat.messages = PulseChat.messages.filter(m => m.id !== data.messageId);
         
-        // Find and remove the message element
-        const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+        // Find and remove the message element - use escaped ID for querySelector
+        const sanitizedId = escapeHtml(data.messageId);
+        const messageElement = document.querySelector(`[data-message-id="${sanitizedId}"]`);
         if (messageElement) {
             messageElement.style.opacity = '0';
             messageElement.style.transform = 'translateY(-20px)';
@@ -550,7 +734,7 @@ function setupSocketHandlers() {
                     <h3>Select a friend to view your conversation</h3>
                 </div>
             `;
-            PulseChat.elements.chatTitle.textContent = 'Select a friend to start chatting';
+            setSafeTextContent(PulseChat.elements.chatTitle, 'Select a friend to start chatting');
             disableInputs();
         }
     });
@@ -560,7 +744,8 @@ function setupSocketHandlers() {
     });
 
     PulseChat.socket.on('user_muted', (data) => {
-        showNotification(`User muted successfully for ${data.duration}!`, 'success');
+        const sanitizedDuration = sanitizeInput(data.duration || 'indefinite');
+        showNotification(`User muted successfully for ${sanitizedDuration}!`, 'success');
     });
 
     PulseChat.socket.on('user_banned', (data) => {
@@ -569,6 +754,21 @@ function setupSocketHandlers() {
     });
 
     // Settings Events
+    PulseChat.socket.on('current_settings', (settings) => {
+        // Update UI with current settings from server
+        if (PulseChat.elements.allowFriendRequests) {
+            PulseChat.elements.allowFriendRequests.checked = settings.allowFriendRequests !== false;
+        }
+        if (PulseChat.elements.allowNotifications) {
+            PulseChat.elements.allowNotifications.checked = settings.allowNotifications !== false;
+        }
+        
+        // Update current user settings
+        if (PulseChat.currentUser) {
+            PulseChat.currentUser.settings = settings;
+        }
+    });
+
     PulseChat.socket.on('settings_updated', (settings) => {
         showMessage('settingsMessage', 'Settings saved successfully!', 'success');
         if (PulseChat.currentUser.settings) {
@@ -629,9 +829,11 @@ function switchSettingsTab(tabName) {
     });
     
     // Activate selected tab
-    const tabButton = Array.from(document.querySelectorAll('.settings-tab-btn')).find(btn => 
-        btn.textContent.toLowerCase().includes(tabName.toLowerCase())
-    );
+    const tabButton = Array.from(document.querySelectorAll('.settings-tab-btn')).find(btn => {
+        const btnText = btn.textContent.toLowerCase().trim();
+        return btnText.includes(tabName.toLowerCase()) || 
+               (tabName === 'preferences' && btnText.includes('settings'));
+    });
     if (tabButton) {
         tabButton.classList.add('active');
     }
@@ -650,23 +852,23 @@ function switchSettingsTab(tabName) {
 function updateProfileTab() {
     if (!PulseChat.currentUser) return;
     
-    // Update profile information
+    // Update profile information safely
     if (PulseChat.elements.profileUsername) {
-        PulseChat.elements.profileUsername.textContent = PulseChat.currentUser.username;
+        setSafeTextContent(PulseChat.elements.profileUsername, PulseChat.currentUser.username);
     }
     
     if (PulseChat.elements.profileTier) {
         const userRole = PulseChat.currentUser.role || 'user';
         const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
         const displayTier = hasSpecialRole ? 3 : (PulseChat.currentUser.tier || 1);
-        PulseChat.elements.profileTier.textContent = `Tier ${displayTier}`;
+        setSafeTextContent(PulseChat.elements.profileTier, `Tier ${displayTier}`);
     }
     
     if (PulseChat.elements.profileRole) {
         const roleElement = PulseChat.elements.profileRole;
         const role = PulseChat.currentUser.role || 'user';
-        roleElement.textContent = role.toUpperCase();
-        roleElement.className = `role-badge ${role}`;
+        setSafeTextContent(roleElement, role.toUpperCase());
+        roleElement.className = `role-badge ${escapeHtml(role)}`;
     }
     
     // Update tier benefits
@@ -690,15 +892,19 @@ function updateTierBenefits() {
         let isAvailable = benefit.available || hasSpecialRole;
         
         benefitDiv.className = `benefit-item ${isAvailable ? 'available' : 'unavailable'}`;
-        benefitDiv.innerHTML = `
+        
+        // Use safe HTML template replacement
+        setSafeHTML(benefitDiv, `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 ${isAvailable ? 
                     '<polyline points="20,6 9,17 4,12"></polyline>' : 
                     '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'
                 }
             </svg>
-            <span>${benefit.text}</span>
-        `;
+            <span>{{BENEFIT_TEXT}}</span>
+        `, {
+            '{{BENEFIT_TEXT}}': benefit.text
+        });
         
         PulseChat.elements.tierBenefitsList.appendChild(benefitDiv);
     });
@@ -707,12 +913,16 @@ function updateTierBenefits() {
     if (hasSpecialRole) {
         const specialDiv = document.createElement('div');
         specialDiv.className = 'benefit-item available';
-        specialDiv.innerHTML = `
+        
+        setSafeHTML(specialDiv, `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"></polygon>
             </svg>
-            <span>All features unlocked (${userRole} privileges)</span>
-        `;
+            <span>All features unlocked ({{USER_ROLE}} privileges)</span>
+        `, {
+            '{{USER_ROLE}}': userRole
+        });
+        
         PulseChat.elements.tierBenefitsList.appendChild(specialDiv);
     }
 }
@@ -757,19 +967,24 @@ function renderMobileFriendsList() {
     PulseChat.friends.forEach(friend => {
         const friendDiv = document.createElement('div');
         friendDiv.className = 'friend-item';
-        friendDiv.setAttribute('data-friend-id', friend.friendId);
+        friendDiv.setAttribute('data-friend-id', escapeHtml(friend.friendId));
         
         // Check if this friend is currently selected
         if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === friend.friendId) {
             friendDiv.classList.add('active');
         }
         
-        friendDiv.innerHTML = `
+        // Use safe HTML template replacement
+        setSafeHTML(friendDiv, `
             <div class="friend-item-info">
-                <div class="friend-username">${escapeHtml(friend.friendUsername)}</div>
-                <div class="friend-role">${friend.friendRole} • Tier ${friend.friendTier}</div>
+                <div class="friend-username">{{USERNAME}}</div>
+                <div class="friend-role">{{ROLE}} • Tier {{TIER}}</div>
             </div>
-        `;
+        `, {
+            '{{USERNAME}}': friend.friendUsername,
+            '{{ROLE}}': friend.friendRole,
+            '{{TIER}}': friend.friendTier
+        });
         
         friendDiv.onclick = () => {
             selectFriend(friend);
@@ -790,7 +1005,7 @@ function renderMobileFriendRequests() {
     }
     
     // Update badge
-    mobileBadge.textContent = PulseChat.friendRequests.length;
+    setSafeTextContent(mobileBadge, PulseChat.friendRequests.length);
     mobileBadge.classList.remove('hidden');
     
     mobileRequestsList.innerHTML = '';
@@ -798,19 +1013,24 @@ function renderMobileFriendRequests() {
     PulseChat.friendRequests.forEach(request => {
         const requestDiv = document.createElement('div');
         requestDiv.className = 'friend-request-item';
-        requestDiv.innerHTML = `
+        
+        setSafeHTML(requestDiv, `
             <div class="friend-request-info">
-                <span class="friend-request-username">${escapeHtml(request.senderUsername)}</span>
+                <span class="friend-request-username">{{USERNAME}}</span>
             </div>
             <div class="friend-request-buttons">
-                <button class="friend-request-btn accept-btn" onclick="respondToFriendRequest('${request.id}', true)">
+                <button class="friend-request-btn accept-btn" onclick="respondToFriendRequest('{{REQUEST_ID}}', true)">
                     ✓ Accept
                 </button>
-                <button class="friend-request-btn deny-btn" onclick="respondToFriendRequest('${request.id}', false)">
+                <button class="friend-request-btn deny-btn" onclick="respondToFriendRequest('{{REQUEST_ID}}', false)">
                     ✗ Deny
                 </button>
             </div>
-        `;
+        `, {
+            '{{USERNAME}}': request.senderUsername,
+            '{{REQUEST_ID}}': request.id
+        });
+        
         mobileRequestsList.appendChild(requestDiv);
     });
 }
@@ -834,10 +1054,10 @@ function updateMobileUserHeader(friend) {
         return;
     }
     
-    // Update mobile header elements
-    PulseChat.elements.mobileHeaderAvatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
-    PulseChat.elements.mobileHeaderName.textContent = friend.friendUsername;
-    PulseChat.elements.mobileHeaderStatus.textContent = 'Tap to view profile';
+    // Update mobile header elements safely
+    setSafeTextContent(PulseChat.elements.mobileHeaderAvatar, friend.friendUsername.charAt(0).toUpperCase());
+    setSafeTextContent(PulseChat.elements.mobileHeaderName, friend.friendUsername);
+    setSafeTextContent(PulseChat.elements.mobileHeaderStatus, 'Tap to view profile');
     
     // Show mobile header
     PulseChat.elements.mobileUserHeader.classList.remove('hidden');
@@ -846,19 +1066,19 @@ function updateMobileUserHeader(friend) {
 function updateMobileUserInfo(friend) {
     if (!friend) return;
     
-    // Update mobile user info modal
-    PulseChat.elements.mobileUserAvatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
-    PulseChat.elements.mobileUserName.textContent = friend.friendUsername;
+    // Update mobile user info modal safely
+    setSafeTextContent(PulseChat.elements.mobileUserAvatar, friend.friendUsername.charAt(0).toUpperCase());
+    setSafeTextContent(PulseChat.elements.mobileUserName, friend.friendUsername);
     
     const mobileRoleElement = PulseChat.elements.mobileUserRole;
-    mobileRoleElement.textContent = friend.friendRole;
-    mobileRoleElement.className = `role-badge ${friend.friendRole}`;
+    setSafeTextContent(mobileRoleElement, friend.friendRole);
+    mobileRoleElement.className = `role-badge ${escapeHtml(friend.friendRole)}`;
     
     // Update details
     const friendsSinceDate = new Date(friend.friendsSince).toLocaleDateString();
-    PulseChat.elements.mobileFriendsSinceDate.textContent = friendsSinceDate;
-    PulseChat.elements.mobileFriendTier.textContent = `Tier ${friend.friendTier}`;
-    PulseChat.elements.mobileFriendRoleInfo.textContent = friend.friendRole.toUpperCase();
+    setSafeTextContent(PulseChat.elements.mobileFriendsSinceDate, friendsSinceDate);
+    setSafeTextContent(PulseChat.elements.mobileFriendTier, `Tier ${friend.friendTier}`);
+    setSafeTextContent(PulseChat.elements.mobileFriendRoleInfo, friend.friendRole.toUpperCase());
     
     // Show/hide admin actions
     const mobileAdminActions = PulseChat.elements.mobileAdminActions;
@@ -875,7 +1095,7 @@ function updateMobileUserInfo(friend) {
 function setCookie(name, value, days) {
     const expires = new Date();
     expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Strict;Secure`;
 }
 
 function getCookie(name) {
@@ -886,23 +1106,19 @@ function getCookie(name) {
 }
 
 function deleteCookie(name) {
-    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/`;
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;SameSite=Strict;Secure`;
 }
 
-// HTML escaping
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Show notification
+// Show notification with safe content
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <div style="font-weight: 500; margin-bottom: 4px;">${escapeHtml(message)}</div>
-    `;
+    
+    setSafeHTML(notification, `
+        <div style="font-weight: 500; margin-bottom: 4px;">{{MESSAGE}}</div>
+    `, {
+        '{{MESSAGE}}': message
+    });
     
     PulseChat.elements.notificationContainer.appendChild(notification);
     
@@ -940,7 +1156,7 @@ function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
     if (element) {
         element.className = `message-display ${type}-message`;
-        element.textContent = message;
+        setSafeTextContent(element, message);
     }
 }
 
@@ -954,8 +1170,8 @@ function clearMessage(elementId) {
 // ===== Authentication Functions =====
 
 function login() {
-    const username = PulseChat.elements.username.value.trim();
-    const password = PulseChat.elements.password.value.trim();
+    const username = sanitizeInput(PulseChat.elements.username.value, 50);
+    const password = sanitizeInput(PulseChat.elements.password.value, 200);
     
     if (!username || !password) {
         showMessage('authMessage', 'Please enter username and password', 'error');
@@ -966,8 +1182,8 @@ function login() {
 }
 
 function register() {
-    const username = PulseChat.elements.regUsername.value.trim();
-    const password = PulseChat.elements.regPassword.value.trim();
+    const username = sanitizeInput(PulseChat.elements.regUsername.value, 50);
+    const password = sanitizeInput(PulseChat.elements.regPassword.value, 200);
     
     if (!username || !password) {
         showMessage('regMessage', 'Please enter username and password', 'error');
@@ -1054,7 +1270,7 @@ function switchTab(tabName) {
 }
 
 function sendFriendRequest() {
-    const username = PulseChat.elements.friendUsername.value.trim();
+    const username = sanitizeInput(PulseChat.elements.friendUsername.value, 50);
     
     if (!username) {
         showMessage('friendMessage', 'Please enter a username', 'error');
@@ -1111,7 +1327,7 @@ function renderFriendRequests() {
     }
     
     // Update badge
-    badge.textContent = PulseChat.friendRequests.length;
+    setSafeTextContent(badge, PulseChat.friendRequests.length);
     badge.classList.remove('hidden');
     
     requestsList.innerHTML = '';
@@ -1119,19 +1335,24 @@ function renderFriendRequests() {
     PulseChat.friendRequests.forEach(request => {
         const requestDiv = document.createElement('div');
         requestDiv.className = 'friend-request-item';
-        requestDiv.innerHTML = `
+        
+        setSafeHTML(requestDiv, `
             <div class="friend-request-info">
-                <span class="friend-request-username">${escapeHtml(request.senderUsername)}</span>
+                <span class="friend-request-username">{{USERNAME}}</span>
             </div>
             <div class="friend-request-buttons">
-                <button class="friend-request-btn accept-btn" onclick="respondToFriendRequest('${request.id}', true)">
+                <button class="friend-request-btn accept-btn" onclick="respondToFriendRequest('{{REQUEST_ID}}', true)">
                     ✓ Accept
                 </button>
-                <button class="friend-request-btn deny-btn" onclick="respondToFriendRequest('${request.id}', false)">
+                <button class="friend-request-btn deny-btn" onclick="respondToFriendRequest('{{REQUEST_ID}}', false)">
                     ✗ Deny
                 </button>
             </div>
-        `;
+        `, {
+            '{{USERNAME}}': request.senderUsername,
+            '{{REQUEST_ID}}': request.id
+        });
+        
         requestsList.appendChild(requestDiv);
     });
 }
@@ -1149,12 +1370,17 @@ function renderBlockedUsers() {
     PulseChat.blockedUsers.forEach(blocked => {
         const blockedDiv = document.createElement('div');
         blockedDiv.className = 'blocked-user-item';
-        blockedDiv.innerHTML = `
-            <span class="blocked-username">${escapeHtml(blocked.blockedUsername)}</span>
-            <button class="unblock-btn" onclick="unblockUser('${blocked.blockedId}')">
+        
+        setSafeHTML(blockedDiv, `
+            <span class="blocked-username">{{USERNAME}}</span>
+            <button class="unblock-btn" onclick="unblockUser('{{USER_ID}}')">
                 Unblock
             </button>
-        `;
+        `, {
+            '{{USERNAME}}': blocked.blockedUsername,
+            '{{USER_ID}}': blocked.blockedId
+        });
+        
         blockedList.appendChild(blockedDiv);
     });
 }
@@ -1183,19 +1409,23 @@ function renderFriendsList() {
     PulseChat.friends.forEach(friend => {
         const friendDiv = document.createElement('div');
         friendDiv.className = 'friend-item';
-        friendDiv.setAttribute('data-friend-id', friend.friendId);
+        friendDiv.setAttribute('data-friend-id', escapeHtml(friend.friendId));
         
         // Check if this friend is currently selected
         if (PulseChat.selectedFriend && PulseChat.selectedFriend.friendId === friend.friendId) {
             friendDiv.classList.add('active');
         }
         
-        friendDiv.innerHTML = `
+        setSafeHTML(friendDiv, `
             <div class="friend-item-info">
-                <div class="friend-username">${escapeHtml(friend.friendUsername)}</div>
-                <div class="friend-role">${friend.friendRole} • Tier ${friend.friendTier}</div>
+                <div class="friend-username">{{USERNAME}}</div>
+                <div class="friend-role">{{ROLE}} • Tier {{TIER}}</div>
             </div>
-        `;
+        `, {
+            '{{USERNAME}}': friend.friendUsername,
+            '{{ROLE}}': friend.friendRole,
+            '{{TIER}}': friend.friendTier
+        });
         
         friendDiv.onclick = () => selectFriend(friend);
         friendsList.appendChild(friendDiv);
@@ -1203,11 +1433,13 @@ function renderFriendsList() {
 }
 
 function respondToFriendRequest(requestId, accept) {
-    PulseChat.socket.emit('respond_friend_request', { requestId, accept });
+    const sanitizedRequestId = sanitizeInput(requestId, 100);
+    PulseChat.socket.emit('respond_friend_request', { requestId: sanitizedRequestId, accept });
 }
 
 function unblockUser(userId) {
-    PulseChat.socket.emit('unblock_user', { userId });
+    const sanitizedUserId = sanitizeInput(userId, 100);
+    PulseChat.socket.emit('unblock_user', { userId: sanitizedUserId });
     
     // Optimistically remove from local state for immediate UI update
     PulseChat.blockedUsers = PulseChat.blockedUsers.filter(blocked => blocked.blockedId !== userId);
@@ -1225,8 +1457,9 @@ function selectFriend(friend) {
     });
     
     // Update both desktop and mobile friend items
-    const desktopFriendElement = PulseChat.elements.friendsList.querySelector(`[data-friend-id="${friend.friendId}"]`);
-    const mobileFriendElement = PulseChat.elements.mobileFriendsList.querySelector(`[data-friend-id="${friend.friendId}"]`);
+    const escapedFriendId = escapeHtml(friend.friendId);
+    const desktopFriendElement = PulseChat.elements.friendsList.querySelector(`[data-friend-id="${escapedFriendId}"]`);
+    const mobileFriendElement = PulseChat.elements.mobileFriendsList.querySelector(`[data-friend-id="${escapedFriendId}"]`);
     
     if (desktopFriendElement) {
         desktopFriendElement.classList.add('active');
@@ -1236,7 +1469,7 @@ function selectFriend(friend) {
     }
     
     // Update desktop title
-    PulseChat.elements.chatTitle.textContent = `Chat with ${friend.friendUsername}`;
+    setSafeTextContent(PulseChat.elements.chatTitle, `Chat with ${friend.friendUsername}`);
     
     // Update mobile header
     updateMobileUserHeader(friend);
@@ -1264,22 +1497,22 @@ function selectFriend(friend) {
 }
 
 function updateUserInfoPanel(friend) {
-    // Update desktop avatar (first letter of username)
+    // Update desktop avatar (first letter of username) safely
     const avatar = PulseChat.elements.friendAvatar;
-    avatar.textContent = friend.friendUsername.charAt(0).toUpperCase();
+    setSafeTextContent(avatar, friend.friendUsername.charAt(0).toUpperCase());
     
     // Update desktop info
-    PulseChat.elements.friendInfoUsername.textContent = friend.friendUsername;
+    setSafeTextContent(PulseChat.elements.friendInfoUsername, friend.friendUsername);
     
     const roleElement = PulseChat.elements.friendInfoRole;
-    roleElement.textContent = friend.friendRole;
-    roleElement.className = `role-badge ${friend.friendRole}`;
+    setSafeTextContent(roleElement, friend.friendRole);
+    roleElement.className = `role-badge ${escapeHtml(friend.friendRole)}`;
     
     // Update desktop details
     const friendsSinceDate = new Date(friend.friendsSince).toLocaleDateString();
-    PulseChat.elements.friendsSinceDate.textContent = friendsSinceDate;
-    PulseChat.elements.friendTier.textContent = `Tier ${friend.friendTier}`;
-    PulseChat.elements.friendRoleInfo.textContent = friend.friendRole.toUpperCase();
+    setSafeTextContent(PulseChat.elements.friendsSinceDate, friendsSinceDate);
+    setSafeTextContent(PulseChat.elements.friendTier, `Tier ${friend.friendTier}`);
+    setSafeTextContent(PulseChat.elements.friendRoleInfo, friend.friendRole.toUpperCase());
     
     // Show/hide admin actions for desktop
     const adminActions = PulseChat.elements.adminActions;
@@ -1294,9 +1527,12 @@ function sendMessage() {
     if (!PulseChat.selectedFriend) return;
     
     const input = PulseChat.elements.messageInput;
-    const content = input.value.trim();
+    const content = sanitizeMessage(input.value);
     
-    if (!content) return;
+    if (!content) {
+        input.value = '';
+        return;
+    }
     
     PulseChat.socket.emit('send_message', {
         receiverId: PulseChat.selectedFriend.friendId,
@@ -1342,7 +1578,7 @@ function addMessageToChat(message, scroll = true) {
     
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${message.senderId === PulseChat.currentUser.id ? 'own' : ''}`;
-    messageDiv.setAttribute('data-message-id', message.id);
+    messageDiv.setAttribute('data-message-id', escapeHtml(message.id));
     
     const timestamp = new Date(message.timestamp).toLocaleTimeString();
     const senderName = message.senderId === PulseChat.currentUser.id ? 'You' : PulseChat.selectedFriend.friendUsername;
@@ -1352,7 +1588,7 @@ function addMessageToChat(message, scroll = true) {
     
     const actionsHtml = canDelete ? `
         <div class="message-actions">
-            <button class="message-action-btn delete-btn" onclick="deleteMessage('${message.id}')">
+            <button class="message-action-btn delete-btn" onclick="deleteMessage('{{MESSAGE_ID}}')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3,6 5,6 21,6"></polyline>
                     <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"></path>
@@ -1362,31 +1598,60 @@ function addMessageToChat(message, scroll = true) {
     ` : '';
     
     if (message.type === 'text') {
-        messageDiv.innerHTML = `
-            <div class="message-header">${senderName} • ${timestamp}</div>
-            <div class="message-content">${escapeHtml(message.content)}</div>
+        setSafeHTML(messageDiv, `
+            <div class="message-header">{{SENDER_NAME}} • {{TIMESTAMP}}</div>
+            <div class="message-content">{{CONTENT}}</div>
             ${actionsHtml}
-        `;
+        `, {
+            '{{SENDER_NAME}}': senderName,
+            '{{TIMESTAMP}}': timestamp,
+            '{{CONTENT}}': message.content,
+            '{{MESSAGE_ID}}': message.id
+        });
     } else if (message.type === 'image') {
-        messageDiv.innerHTML = `
-            <div class="message-header">${senderName} • ${timestamp}</div>
+        // Validate media URL for security
+        const mediaUrl = `/api/media/${message.content}`;
+        if (!isValidMediaUrl(mediaUrl)) {
+            console.error('Invalid media URL detected');
+            return;
+        }
+        
+        setSafeHTML(messageDiv, `
+            <div class="message-header">{{SENDER_NAME}} • {{TIMESTAMP}}</div>
             <div class="message-content">
-                <img src="/api/media/${message.content}" alt="Shared image" loading="lazy">
+                <img src="{{MEDIA_URL}}" alt="Shared image" loading="lazy">
             </div>
             ${actionsHtml}
-        `;
+        `, {
+            '{{SENDER_NAME}}': senderName,
+            '{{TIMESTAMP}}': timestamp,
+            '{{MEDIA_URL}}': mediaUrl,
+            '{{MESSAGE_ID}}': message.id
+        });
     } else if (message.type === 'video') {
-        messageDiv.innerHTML = `
-            <div class="message-header">${senderName} • ${timestamp}</div>
+        // Validate media URL for security
+        const mediaUrl = `/api/media/${message.content}`;
+        if (!isValidMediaUrl(mediaUrl)) {
+            console.error('Invalid media URL detected');
+            return;
+        }
+        
+        setSafeHTML(messageDiv, `
+            <div class="message-header">{{SENDER_NAME}} • {{TIMESTAMP}}</div>
             <div class="message-content">
                 <video controls preload="metadata">
-                    <source src="/api/media/${message.content}" type="video/mp4">
-                    <source src="/api/media/${message.content}" type="video/webm">
+                    <source src="{{MEDIA_URL}}" type="video/mp4">
+                    <source src="{{MEDIA_URL}}" type="video/webm">
                     Your browser does not support the video tag.
                 </video>
             </div>
             ${actionsHtml}
-        `;
+        `, {
+            '{{SENDER_NAME}}': senderName,
+            '{{TIMESTAMP}}': timestamp,
+            '{{MEDIA_URL}}': mediaUrl,
+            '{{MESSAGE_ID}}': message.id
+        });
     }
     
     container.appendChild(messageDiv);
@@ -1401,7 +1666,8 @@ function deleteMessage(messageId) {
         return;
     }
     
-    PulseChat.socket.emit('delete_message', { messageId });
+    const sanitizedMessageId = sanitizeInput(messageId, 100);
+    PulseChat.socket.emit('delete_message', { messageId: sanitizedMessageId });
 }
 
 function uploadFile() {
@@ -1418,6 +1684,14 @@ function uploadFile() {
     
     if (!isImage && !isVideo) {
         showNotification('Please select an image or video file', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    // Additional file validation for security
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxFileSize) {
+        showNotification('File is too large. Maximum size is 50MB.', 'error');
         fileInput.value = '';
         return;
     }
@@ -1516,7 +1790,7 @@ function closeBanModal() {
 function confirmBan() {
     if (!PulseChat.userToBan) return;
     
-    const reason = PulseChat.elements.banReason.value.trim();
+    const reason = sanitizeInput(PulseChat.elements.banReason.value, 500);
     PulseChat.socket.emit('admin_ban_user', { userId: PulseChat.userToBan, reason });
 }
 
@@ -1524,6 +1798,9 @@ function confirmBan() {
 
 function showSettings() {
     showModal(PulseChat.elements.settingsModal);
+    
+    // Request current settings from server
+    PulseChat.socket.emit('get_current_settings');
     
     // Default to profile tab
     switchSettingsTab('profile');
@@ -1541,8 +1818,12 @@ function closeSettings() {
 
 function saveSettings() {
     const allowFriendRequests = PulseChat.elements.allowFriendRequests.checked;
+    const allowNotifications = PulseChat.elements.allowNotifications.checked;
     
-    PulseChat.socket.emit('update_settings', { allowFriendRequests });
+    PulseChat.socket.emit('update_settings', { 
+        allowFriendRequests,
+        allowNotifications 
+    });
 }
 
 // ===== Event Listeners =====
@@ -1643,9 +1924,13 @@ window.addEventListener('resize', function() {
 // ===== Initialization =====
 
 window.addEventListener('load', () => {
-    // Initialize socket and visibility handling
+    // Create notification sound
+    createNotificationSound();
+    
+    // Initialize socket, visibility handling, and message input focus detection
     initializeSocket();
     setupVisibilityHandling();
+    setupMessageInputFocusDetection();
     
     // Try auto-login
     checkAutoLogin();

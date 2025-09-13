@@ -806,6 +806,7 @@ body {
 .settings-modal-content {
   max-width: 700px;
   width: 95%;
+  min-height: 600px; /* Fixed minimum height to prevent size changes */
 }
 
 .modal-header {
@@ -887,6 +888,10 @@ body {
   background: var(--primary-500);
   color: white;
   box-shadow: var(--shadow-md);
+}
+
+.settings-content {
+  min-height: 400px; /* Fixed minimum height to prevent content jumping */
 }
 
 .settings-tab-content {
@@ -988,8 +993,8 @@ body {
   opacity: 0.6;
 }
 
-/* Privacy Tab Styles */
-.privacy-section {
+/* Settings/Preferences Tab Styles */
+.settings-section {
   margin-bottom: var(--space-6);
 }
 
@@ -1143,10 +1148,6 @@ body {
 }
 
 /* Settings */
-.settings-content {
-  margin-bottom: var(--space-6);
-}
-
 .setting-item {
   display: flex;
   align-items: center;
@@ -1162,12 +1163,14 @@ body {
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: var(--space-1);
+  display: block;
 }
 
 .setting-info p {
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin: 0;
+  line-height: 1.4;
 }
 
 /* Main Application */
@@ -1917,6 +1920,7 @@ body {
   
   .settings-modal-content {
     max-width: 600px;
+    min-height: 550px; /* Slightly reduced for tablets */
   }
 }
 
@@ -2041,6 +2045,7 @@ body {
     max-width: none;
     max-height: calc(100vh - 1rem);
     max-height: calc(100dvh - 1rem);
+    min-height: 500px; /* Reduced for mobile */
   }
   
   /* Settings tabs mobile adjustments */
@@ -2054,6 +2059,10 @@ body {
     width: 100%;
     justify-content: flex-start;
     text-align: left;
+  }
+  
+  .settings-content {
+    min-height: 350px; /* Reduced for mobile */
   }
   
   /* About section mobile adjustments */
@@ -2114,6 +2123,11 @@ body {
   .settings-modal-content {
     margin: var(--space-1);
     padding: var(--space-4);
+    min-height: 450px; /* Further reduced for small screens */
+  }
+  
+  .settings-content {
+    min-height: 300px; /* Further reduced for small screens */
   }
   
   .auth-modal {

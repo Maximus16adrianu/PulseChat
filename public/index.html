@@ -9,6 +9,11 @@
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
+    <!-- Notification Sound -->
+    <audio id="notificationSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTSKzPPLfi4IIYnN8++HNwgZZ7zr7Z1NEAxUq+Hsr2EYBC6J0vPPgjoIIw==" type="audio/wav">
+    </audio>
+
     <!-- Mobile Navigation Overlay -->
     <div id="mobileNavOverlay" class="mobile-nav-overlay hidden">
         <div class="mobile-nav-backdrop"></div>
@@ -283,7 +288,7 @@
             
             <div class="settings-tabs">
                 <button class="settings-tab-btn active" onclick="switchSettingsTab('profile')">Profile</button>
-                <button class="settings-tab-btn" onclick="switchSettingsTab('privacy')">Privacy</button>
+                <button class="settings-tab-btn" onclick="switchSettingsTab('preferences')">Settings</button>
                 <button class="settings-tab-btn" onclick="switchSettingsTab('about')">About</button>
             </div>
             
@@ -341,10 +346,10 @@
                     </div>
                 </div>
                 
-                <!-- Privacy Tab -->
-                <div id="privacyTab" class="settings-tab-content">
-                    <div class="privacy-section">
-                        <h3 class="settings-section-title">Privacy Settings</h3>
+                <!-- Settings Tab -->
+                <div id="preferencesTab" class="settings-tab-content">
+                    <div class="settings-section">
+                        <h3 class="settings-section-title">Preferences</h3>
                         
                         <div class="setting-item">
                             <div class="setting-info">
@@ -354,6 +359,17 @@
                             <div class="toggle-switch">
                                 <input type="checkbox" id="allowFriendRequests" checked>
                                 <label for="allowFriendRequests" class="switch"></label>
+                            </div>
+                        </div>
+                        
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <label for="allowNotifications">Notification Sounds</label>
+                                <p>Play sound when receiving messages while tab is not focused</p>
+                            </div>
+                            <div class="toggle-switch">
+                                <input type="checkbox" id="allowNotifications" checked>
+                                <label for="allowNotifications" class="switch"></label>
                             </div>
                         </div>
                     </div>

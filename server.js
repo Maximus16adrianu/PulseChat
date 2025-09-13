@@ -21,6 +21,8 @@ const FIRST_MUTE_DURATION = 60 * 1000; // 1 minute
 const ESCALATED_MUTE_DURATION = 60 * 60 * 1000; // 1 hour
 const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
+const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+const MAX_MESSAGES_PER_CHAT = 250; // Maximum messages to keep per chat
 
 // Middleware
 app.use(express.json());
@@ -222,6 +224,7 @@ async function createChat(user1Id, user2Id) {
   return newChat;
 }
 
+// Simplified function to load ALL messages for a chat (max 250)
 async function getMessagesForUsers(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
   const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
@@ -229,10 +232,163 @@ async function getMessagesForUsers(user1Id, user2Id) {
   try {
     const data = await fs.readFile(chatFile, 'utf8');
     const messages = JSON.parse(data);
+    
+    // Sort by timestamp (oldest first for display)
     return messages.sort((a, b) => a.timestamp - b.timestamp);
   } catch (error) {
     // Chat doesn't exist yet, return empty array
     return [];
+  }
+}
+
+// Enhanced message cleanup function
+async function cleanupOldMessages() {
+  console.log('Starting message cleanup...');
+  const now = Date.now();
+  const cutoffTime = now - MESSAGE_RETENTION_TIME;
+  let totalDeleted = 0;
+  let filesDeleted = 0;
+  
+  try {
+    const chats = await loadJSON('private/messages/chats.json');
+    
+    for (const chat of chats) {
+      const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chat.id, `${chat.id}.json`);
+      
+      try {
+        const data = await fs.readFile(chatFile, 'utf8');
+        const messages = JSON.parse(data);
+        const initialCount = messages.length;
+        
+        // Separate messages to keep and delete based on BOTH time and count
+        const messagesToDelete = messages.filter(msg => msg.timestamp < cutoffTime);
+        let messagesToKeep = messages.filter(msg => msg.timestamp >= cutoffTime);
+        
+        // Delete associated media files for old messages
+        for (const message of messagesToDelete) {
+          if (message.type === 'image' || message.type === 'video') {
+            try {
+              const filePath = message.type === 'image' 
+                ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+                : path.join(__dirname, 'private', 'messages', 'videos', message.content);
+              await fs.unlink(filePath);
+              filesDeleted++;
+            } catch (error) {
+              // File might already be deleted or not exist
+              console.log(`Could not delete media file ${message.content}: ${error.message}`);
+            }
+          }
+        }
+        
+        // Apply message count limit as well (keep most recent messages)
+        if (messagesToKeep.length > MAX_MESSAGES_PER_CHAT) {
+          // Sort by timestamp and keep the most recent ones
+          messagesToKeep.sort((a, b) => b.timestamp - a.timestamp);
+          const excessMessages = messagesToKeep.slice(MAX_MESSAGES_PER_CHAT);
+          messagesToKeep = messagesToKeep.slice(0, MAX_MESSAGES_PER_CHAT);
+          
+          // Delete media files for excess messages too
+          for (const message of excessMessages) {
+            if (message.type === 'image' || message.type === 'video') {
+              try {
+                const filePath = message.type === 'image' 
+                  ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
+                  : path.join(__dirname, 'private', 'messages', 'videos', message.content);
+                await fs.unlink(filePath);
+                filesDeleted++;
+              } catch (error) {
+                console.log(`Could not delete excess media file ${message.content}: ${error.message}`);
+              }
+            }
+          }
+        }
+        
+        // Save cleaned messages back to file
+        if (messagesToKeep.length !== initialCount) {
+          await fs.writeFile(chatFile, JSON.stringify(messagesToKeep, null, 2));
+          const deletedCount = initialCount - messagesToKeep.length;
+          totalDeleted += deletedCount;
+          
+          if (deletedCount > 0) {
+            console.log(`Chat ${chat.id}: Deleted ${deletedCount} old messages (${initialCount} -> ${messagesToKeep.length})`);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`Error cleaning chat ${chat.id}:`, error);
+      }
+    }
+    
+    console.log(`Message cleanup completed: ${totalDeleted} messages deleted, ${filesDeleted} media files deleted`);
+    
+  } catch (error) {
+    console.error('Error during message cleanup:', error);
+  }
+}
+
+// Enhanced function to clean up orphaned media files
+async function cleanupOrphanedMediaFiles() {
+  console.log('Starting orphaned media cleanup...');
+  let orphanedFiles = 0;
+  
+  try {
+    const chats = await loadJSON('private/messages/chats.json');
+    const referencedFiles = new Set();
+    
+    // Collect all referenced media files from all chats
+    for (const chat of chats) {
+      try {
+        const messages = await getMessagesForUsers(chat.participants[0], chat.participants[1]);
+        for (const message of messages) {
+          if (message.type === 'image' || message.type === 'video') {
+            referencedFiles.add(message.content);
+          }
+        }
+      } catch (error) {
+        console.error(`Error checking chat ${chat.id} for media references:`, error);
+      }
+    }
+    
+    // Check pictures directory
+    try {
+      const pictureFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'pictures'));
+      for (const file of pictureFiles) {
+        if (!referencedFiles.has(file)) {
+          try {
+            await fs.unlink(path.join(__dirname, 'private', 'messages', 'pictures', file));
+            orphanedFiles++;
+            console.log(`Deleted orphaned picture: ${file}`);
+          } catch (error) {
+            console.error(`Error deleting orphaned picture ${file}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reading pictures directory:', error);
+    }
+    
+    // Check videos directory
+    try {
+      const videoFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'videos'));
+      for (const file of videoFiles) {
+        if (!referencedFiles.has(file)) {
+          try {
+            await fs.unlink(path.join(__dirname, 'private', 'messages', 'videos', file));
+            orphanedFiles++;
+            console.log(`Deleted orphaned video: ${file}`);
+          } catch (error) {
+            console.error(`Error deleting orphaned video ${file}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reading videos directory:', error);
+    }
+    
+    console.log(`Orphaned media cleanup completed: ${orphanedFiles} files deleted`);
+    
+  } catch (error) {
+    console.error('Error during orphaned media cleanup:', error);
   }
 }
 
@@ -248,9 +404,34 @@ async function saveMessageToChat(user1Id, user2Id, message) {
   // Add new message
   messages.push(message);
   
+  // Sort by timestamp and enforce message limit
+  messages.sort((a, b) => a.timestamp - b.timestamp);
+  
+  // Keep only the most recent messages if we exceed the limit
+  let finalMessages = messages;
+  if (messages.length > MAX_MESSAGES_PER_CHAT) {
+    const excessMessages = messages.slice(0, messages.length - MAX_MESSAGES_PER_CHAT);
+    finalMessages = messages.slice(-MAX_MESSAGES_PER_CHAT);
+    
+    // Delete associated files for excess messages
+    for (const oldMessage of excessMessages) {
+      if (oldMessage.type === 'image' || oldMessage.type === 'video') {
+        try {
+          const filePath = oldMessage.type === 'image' 
+            ? path.join(__dirname, 'private', 'messages', 'pictures', oldMessage.content)
+            : path.join(__dirname, 'private', 'messages', 'videos', oldMessage.content);
+          await fs.unlink(filePath);
+          console.log(`Deleted excess message file: ${filePath}`);
+        } catch (error) {
+          console.log(`Could not delete excess file ${oldMessage.content}:`, error.message);
+        }
+      }
+    }
+  }
+  
   // Save messages back to chat file
   const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
-  await fs.writeFile(chatFile, JSON.stringify(messages, null, 2));
+  await fs.writeFile(chatFile, JSON.stringify(finalMessages, null, 2));
   
   // Update last message time in chats.json
   const chats = await loadJSON('private/messages/chats.json');
@@ -826,6 +1007,7 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Simplified load_messages - loads ALL messages (max 250)
   socket.on('load_messages', async (data) => {
     try {
       if (!socket.userId) return;
@@ -1338,11 +1520,12 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Updated settings handler with notifications support
   socket.on('update_settings', async (data) => {
     try {
       if (!socket.userId) return;
       
-      const { allowFriendRequests } = data;
+      const { allowFriendRequests, allowNotifications } = data;
       
       const users = await loadJSON('private/users/users.json');
       const userIndex = users.findIndex(u => u.id === socket.userId);
@@ -1356,11 +1539,21 @@ io.on('connection', (socket) => {
         users[userIndex].settings = {};
       }
       
-      users[userIndex].settings.allowFriendRequests = allowFriendRequests;
+      // Update settings
+      if (allowFriendRequests !== undefined) {
+        users[userIndex].settings.allowFriendRequests = allowFriendRequests;
+      }
+      
+      if (allowNotifications !== undefined) {
+        users[userIndex].settings.allowNotifications = allowNotifications;
+      }
       
       await saveJSON('private/users/users.json', users);
       
-      socket.emit('settings_updated', { allowFriendRequests });
+      socket.emit('settings_updated', { 
+        allowFriendRequests: users[userIndex].settings.allowFriendRequests,
+        allowNotifications: users[userIndex].settings.allowNotifications
+      });
       
     } catch (error) {
       console.error('Settings update error:', error);
@@ -1413,7 +1606,8 @@ app.post('/api/register', async (req, res) => {
       banned: false,
       created: Date.now(),
       settings: {
-        allowFriendRequests: true
+        allowFriendRequests: true,
+        allowNotifications: true // Default notifications enabled
       }
     };
     
@@ -1815,16 +2009,148 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
+// Manual cleanup endpoint for admins
+app.post('/api/admin/cleanup', async (req, res) => {
+  try {
+    console.log('Manual cleanup initiated...');
+    await cleanupOldMessages();
+    await cleanupOrphanedMediaFiles();
+    await cleanupOldSessions();
+    await cleanupExpiredMutes();
+    
+    res.json({ message: 'Cleanup completed successfully' });
+  } catch (error) {
+    console.error('Manual cleanup error:', error);
+    res.status(500).json({ error: 'Cleanup failed' });
+  }
+});
+
+// New API endpoints for notifications setting
+app.get('/api/settings', async (req, res) => {
+  try {
+    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'No session token provided' });
+    }
+    
+    const userId = await getSessionUserId(sessionToken);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid session token' });
+    }
+    
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      allowFriendRequests: user.settings?.allowFriendRequests ?? true,
+      allowNotifications: user.settings?.allowNotifications ?? true
+    });
+    
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/settings/notifications', async (req, res) => {
+  try {
+    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'No session token provided' });
+    }
+    
+    const userId = await getSessionUserId(sessionToken);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid session token' });
+    }
+    
+    const { allowNotifications } = req.body;
+    if (typeof allowNotifications !== 'boolean') {
+      return res.status(400).json({ error: 'allowNotifications must be a boolean' });
+    }
+    
+    const users = await loadJSON('private/users/users.json');
+    const userIndex = users.findIndex(u => u.id === userId);
+    
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!users[userIndex].settings) {
+      users[userIndex].settings = {};
+    }
+    
+    users[userIndex].settings.allowNotifications = allowNotifications;
+    await saveJSON('private/users/users.json', users);
+    
+    res.json({ 
+      message: 'Notifications setting updated successfully',
+      allowNotifications 
+    });
+    
+  } catch (error) {
+    console.error('Update notifications setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/settings/friend-requests', async (req, res) => {
+  try {
+    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
+    if (!sessionToken) {
+      return res.status(401).json({ error: 'No session token provided' });
+    }
+    
+    const userId = await getSessionUserId(sessionToken);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid session token' });
+    }
+    
+    const { allowFriendRequests } = req.body;
+    if (typeof allowFriendRequests !== 'boolean') {
+      return res.status(400).json({ error: 'allowFriendRequests must be a boolean' });
+    }
+    
+    const users = await loadJSON('private/users/users.json');
+    const userIndex = users.findIndex(u => u.id === userId);
+    
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!users[userIndex].settings) {
+      users[userIndex].settings = {};
+    }
+    
+    users[userIndex].settings.allowFriendRequests = allowFriendRequests;
+    await saveJSON('private/users/users.json', users);
+    
+    res.json({ 
+      message: 'Friend requests setting updated successfully',
+      allowFriendRequests 
+    });
+    
+  } catch (error) {
+    console.error('Update friend requests setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Serve main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Cleanup routines
+// Enhanced cleanup routines - now runs every 30 minutes
 setInterval(async () => {
+  console.log('Running scheduled cleanup...');
   await cleanupOldSessions();
   await cleanupExpiredMutes();
-}, 60 * 60 * 1000); // Run every hour
+  await cleanupOldMessages();  // Clean up old messages
+  await cleanupOrphanedMediaFiles();  // Clean up orphaned files
+}, 30 * 60 * 1000); // Run every 30 minutes
 
 // Initialize and start server
 async function start() {
@@ -1834,6 +2160,8 @@ async function start() {
     console.log(`PulseChat server running on port ${PORT}`);
     console.log(`Admin API key: ${ADMIN_API_KEY}`);
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
+    console.log(`Message retention: 48 hours`);
+    console.log(`Max messages per chat: ${MAX_MESSAGES_PER_CHAT}`);
   });
 }
 
