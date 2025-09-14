@@ -14,80 +14,6 @@
         <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTSKzPPLfi4IIYnN8++HNwgZZ7zr7Z1NEAxUq+Hsr2EYBC6J0vPPgjoIIw==" type="audio/wav">
     </audio>
 
-    <!-- Active Call Overlay -->
-    <div id="activeCallOverlay" class="call-overlay hidden">
-        <div class="call-overlay-content">
-            <div class="call-info">
-                <div class="call-avatar" id="callAvatar">?</div>
-                <h3 id="callUserName" class="call-user-name">Unknown User</h3>
-                <div id="callStatus" class="call-status">Connecting...</div>
-                <div id="callTimer" class="call-timer hidden">00:00</div>
-                <div id="callTimeRemaining" class="call-time-remaining hidden">
-                    <span>Time left: <span id="callTimeLeft">--:--</span></span>
-                </div>
-            </div>
-            
-            <div class="call-controls">
-                <button class="call-btn call-btn-mute" id="muteBtn" title="Mute">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                </button>
-                
-                <button class="call-btn call-btn-end" id="endCallBtn" onclick="endCall()" title="End Call">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 7v10a1 1 0 0 0 1 1h2.5l2-2L11 18h2l2.5-2 2 2H20a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2.5l-2 2L13 6h-2L8.5 8l-2-2H4a1 1 0 0 0-1 1z"></path>
-                        <path d="M9 12h6"></path>
-                    </svg>
-                </button>
-                
-                <button class="call-btn call-btn-speaker" id="speakerBtn" title="Speaker">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Incoming Call Modal -->
-    <div id="incomingCallModal" class="modal hidden">
-        <div class="modal-backdrop call-backdrop"></div>
-        <div class="modal-content incoming-call-content">
-            <div class="incoming-call-header">
-                <div class="incoming-call-avatar" id="incomingCallAvatar">?</div>
-                <h3 id="incomingCallUserName" class="incoming-call-user-name">Unknown User</h3>
-                <p class="incoming-call-subtitle">Incoming call...</p>
-                <div class="call-ring-animation">
-                    <div class="ring"></div>
-                    <div class="ring"></div>
-                    <div class="ring"></div>
-                </div>
-            </div>
-            
-            <div class="incoming-call-controls">
-                <button class="call-btn call-btn-decline" onclick="answerCall(false)" title="Decline">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 7v10a1 1 0 0 0 1 1h2.5l2-2L11 18h2l2.5-2 2 2H20a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2.5l-2 2L13 6h-2L8.5 8l-2-2H4a1 1 0 0 0-1 1z"></path>
-                        <path d="M9 12h6"></path>
-                    </svg>
-                </button>
-                
-                <button class="call-btn call-btn-accept" onclick="answerCall(true)" title="Accept">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 7v10a1 1 0 0 0 1 1h2.5l2-2L11 18h2l2.5-2 2 2H20a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2.5l-2 2L13 6h-2L8.5 8l-2-2H4a1 1 0 0 0-1 1z"></path>
-                        <path d="M5 12h14"></path>
-                        <path d="M12 5l7 7-7 7"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Mobile Navigation Overlay -->
     <div id="mobileNavOverlay" class="mobile-nav-overlay hidden">
         <div class="mobile-nav-backdrop"></div>
@@ -189,14 +115,6 @@
             </div>
             
             <div class="mobile-user-actions">
-                <!-- Call Action -->
-                <button class="btn btn-success call-action-btn" id="mobileCallBtn" onclick="initiateCall()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                    </svg>
-                    Start Call
-                </button>
-                
                 <button class="btn btn-danger" id="mobileBlockBtn" onclick="blockUser()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -417,19 +335,6 @@
                                     <span class="role-badge" id="profileRole">-</span>
                                 </div>
                             </div>
-                            
-                            <div class="profile-info-item">
-                                <div class="profile-info-label">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polyline points="12,6 12,12 16,14"></polyline>
-                                    </svg>
-                                    Call Time Remaining
-                                </div>
-                                <div class="profile-info-value">
-                                    <span class="call-time-badge" id="profileCallTime">Loading...</span>
-                                </div>
-                            </div>
                         </div>
                         
                         <div class="tier-benefits">
@@ -465,17 +370,6 @@
                             <div class="toggle-switch">
                                 <input type="checkbox" id="allowNotifications" checked>
                                 <label for="allowNotifications" class="switch"></label>
-                            </div>
-                        </div>
-                        
-                        <div class="setting-item">
-                            <div class="setting-info">
-                                <label for="allowCalls">Allow Voice Calls</label>
-                                <p>Let friends call you using voice chat</p>
-                            </div>
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="allowCalls" checked>
-                                <label for="allowCalls" class="switch"></label>
                             </div>
                         </div>
                     </div>
@@ -523,16 +417,6 @@
                                         <li><strong>Auto-deletion:</strong> All messages are automatically deleted after 48 hours</li>
                                         <li><strong>RAM-only IPs:</strong> IP addresses are only stored in RAM - if our server shuts down, all IP records are permanently lost</li>
                                         <li><strong>Encrypted storage:</strong> Only encrypted messages are stored on our backend systems</li>
-                                    </ul>
-                                </div>
-                                
-                                <div class="about-section-block">
-                                    <h5>Voice Calls</h5>
-                                    <ul>
-                                        <li><strong>Server-relayed:</strong> All voice calls are routed through our servers to protect your IP address</li>
-                                        <li><strong>Time limits:</strong> Weekly call time limits based on your tier to manage bandwidth</li>
-                                        <li><strong>Real-time tracking:</strong> Call time is tracked and deducted in real-time for both participants</li>
-                                        <li><strong>Privacy first:</strong> No call recordings or monitoring - just secure, private communication</li>
                                     </ul>
                                 </div>
                                 
@@ -755,14 +639,6 @@
                     </div>
                     
                     <div class="user-actions">
-                        <!-- Call Action -->
-                        <button class="btn btn-success call-action-btn" id="callBtn" onclick="initiateCall()">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                            </svg>
-                            Start Call
-                        </button>
-                        
                         <button class="btn btn-danger" id="blockBtn" onclick="blockUser()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"></circle>

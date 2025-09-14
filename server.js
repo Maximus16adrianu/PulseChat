@@ -7,15 +7,11 @@ const fs = require('fs').promises;
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
-const archiver = require('archiver');
+const archiver = require('archiver'); // You'll need to install this: npm install archiver
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-  maxHttpBufferSize: 1e8, // 100MB for audio chunks
-  pingTimeout: 60000,
-  pingInterval: 25000
-});
+const io = socketIo(server);
 
 const PORT = process.env.PORT || 3002;
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '@adan.mal.16!:';
@@ -24,67 +20,51 @@ const FRIEND_REQUEST_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 const FIRST_MUTE_DURATION = 60 * 1000; // 1 minute
 const ESCALATED_MUTE_DURATION = 60 * 60 * 1000; // 1 hour
 const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
-const MAX_MESSAGE_LENGTH = 250;
-const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours
-const MAX_MESSAGES_PER_CHAT = 250;
-
-// Updated call time limits per week (in milliseconds) - Server-relayed audio
-const CALL_TIME_LIMITS = {
-  1: 5 * 60 * 60 * 1000,  // Tier 1: 5 hours
-  2: 10 * 60 * 60 * 1000, // Tier 2: 10 hours 
-  3: 15 * 60 * 60 * 1000, // Tier 3: 15 hours
-  developer: 15 * 60 * 60 * 1000, // Developer: 15 hours
-  admin: -1, // Unlimited
-  owner: -1  // Unlimited
-};
-
-// Audio streaming constants (32kbps server-relayed)
-const AUDIO_SAMPLE_RATE = 16000; // 16kHz
-const AUDIO_BITRATE = 32000; // 32kbps
-const AUDIO_CHUNK_SIZE = 1024; // bytes per chunk
-const AUDIO_CHUNK_INTERVAL = 20; // ms between chunks
+const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
+const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+const MAX_MESSAGES_PER_CHAT = 250; // Maximum messages to keep per chat
 
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('public'));
 
-// Rate limiting
+// Rate limiting for login attempts - 5 per minute
 const loginLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 login attempts per minute per IP
   message: { error: 'Too many login attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
+// General API rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
 });
 
 app.use('/api/register', loginLimiter);
 app.use('/api/', apiLimiter);
 
-// In-memory storage
+// In-memory storage for active users and rate limiting
 const activeUsers = new Map();
 const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
 
-// Server-relayed voice calling state management
-const activeCalls = new Map(); // callId -> { caller, receiver, startTime, answeredTime, status }
-const userCalls = new Map();   // userId -> callId (only when actually in call)
-const callTimeTracking = new Map(); // callId -> { startTime, lastUpdate }
-const audioStreams = new Map(); // callId -> { callerStream: Buffer[], receiverStream: Buffer[] }
-
-// Initialize directories
+// Ensure directories exist
 async function initializeDirectories() {
   const dirs = [
-    'private', 'private/messages', 'private/messages/chats',
-    'private/messages/pictures', 'private/messages/videos',
-    'private/users', 'private/friends', 'private/logins',
-    'private/mutes', 'private/calls'
+    'private',
+    'private/messages',
+    'private/messages/chats',
+    'private/messages/pictures',
+    'private/messages/videos',
+    'private/users',
+    'private/friends',
+    'private/logins',
+    'private/mutes'
   ];
   
   for (const dir of dirs) {
@@ -97,10 +77,13 @@ async function initializeDirectories() {
     }
   }
   
+  // Initialize JSON files if they don't exist
   const files = [
-    'private/messages/chats.json', 'private/users/users.json',
-    'private/friends/friends.json', 'private/logins/logins.json',
-    'private/mutes/mutes.json', 'private/calls/calls.json'
+    'private/messages/chats.json',
+    'private/users/users.json',
+    'private/friends/friends.json',
+    'private/logins/logins.json',
+    'private/mutes/mutes.json'
   ];
   
   for (const file of files) {
@@ -112,126 +95,7 @@ async function initializeDirectories() {
   }
 }
 
-// Dynamic week calculation functions - bulletproof after server restarts
-function getDaysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
-}
-
-function getCurrentDynamicWeek() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1; // 1-12
-  const dayOfMonth = now.getDate(); // 1-31
-  
-  const daysInMonth = getDaysInMonth(year, month);
-  const daysPerWeek = daysInMonth / 4; // Dynamic week length
-  
-  const currentWeek = Math.ceil(dayOfMonth / daysPerWeek);
-  
-  return {
-    year,
-    month,
-    week: Math.min(currentWeek, 4), // Cap at week 4
-    daysInMonth,
-    daysPerWeek: Math.round(daysPerWeek * 100) / 100 // Round to 2 decimals
-  };
-}
-
-function getCurrentMonth() {
-  return new Date().getMonth() + 1;
-}
-
-function getCurrentYear() {
-  return new Date().getFullYear();
-}
-
-// Call time management with dynamic weeks
-async function getUserCallTimeData(userId) {
-  const callData = await loadJSON('private/calls/calls.json');
-  const currentPeriod = getCurrentDynamicWeek();
-  
-  let userRecord = callData.find(record => record.userId === userId);
-  
-  if (!userRecord) {
-    userRecord = {
-      userId,
-      week: currentPeriod.week,
-      month: currentPeriod.month,
-      year: currentPeriod.year,
-      timeUsed: 0,
-      lastReset: Date.now()
-    };
-    callData.push(userRecord);
-    await saveJSON('private/calls/calls.json', callData);
-  }
-  
-  // Reset if we're in a new week/month/year (bulletproof calculation)
-  const needsReset = (
-    userRecord.week !== currentPeriod.week ||
-    userRecord.month !== currentPeriod.month ||
-    userRecord.year !== currentPeriod.year
-  );
-  
-  if (needsReset) {
-    console.log(`Resetting call time for user ${userId}: Week ${userRecord.week}->${currentPeriod.week}, Month ${userRecord.month}->${currentPeriod.month}`);
-    
-    userRecord.week = currentPeriod.week;
-    userRecord.month = currentPeriod.month;
-    userRecord.year = currentPeriod.year;
-    userRecord.timeUsed = 0;
-    userRecord.lastReset = Date.now();
-    
-    await saveJSON('private/calls/calls.json', callData);
-  }
-  
-  return userRecord;
-}
-
-async function updateUserCallTime(userId, timeToAdd) {
-  const callData = await loadJSON('private/calls/calls.json');
-  const userRecord = await getUserCallTimeData(userId);
-  
-  userRecord.timeUsed += timeToAdd;
-  
-  const recordIndex = callData.findIndex(record => record.userId === userId);
-  if (recordIndex !== -1) {
-    callData[recordIndex] = userRecord;
-  }
-  
-  await saveJSON('private/calls/calls.json', callData);
-  return userRecord.timeUsed;
-}
-
-async function getUserRemainingCallTime(userId) {
-  const user = await getUserById(userId);
-  if (!user) return 0;
-  
-  // Unlimited for admins and owners
-  if (user.role === 'admin' || user.role === 'owner') {
-    return -1; // Unlimited
-  }
-  
-  // Get time limit based on tier/role
-  let timeLimit;
-  if (user.role === 'developer') {
-    timeLimit = CALL_TIME_LIMITS.developer;
-  } else {
-    const tier = getUserTier(user);
-    timeLimit = CALL_TIME_LIMITS[tier];
-  }
-  
-  const userRecord = await getUserCallTimeData(userId);
-  const remainingTime = timeLimit - userRecord.timeUsed;
-  
-  return Math.max(0, remainingTime);
-}
-
-async function canUserStartCall(userId) {
-  const remainingTime = await getUserRemainingCallTime(userId);
-  return remainingTime === -1 || remainingTime > 0;
-}
-
-// File upload configuration
+// File upload configuration - Using memory storage first for validation
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -290,13 +154,17 @@ function isOwner(user) {
   return user.role === 'owner';
 }
 
+// Function to check if user1 can perform admin actions on user2
 function canAdminAction(user1, user2) {
   if (!user1 || !user2) return false;
   
+  // Owner can do anything to anyone
   if (user1.role === 'owner') return true;
   
+  // Admin cannot perform actions on owner
   if (user1.role === 'admin' && user2.role === 'owner') return false;
   
+  // Admin can perform actions on admin, developer, and user
   if (user1.role === 'admin' && ['admin', 'developer', 'user'].includes(user2.role)) return true;
   
   return false;
@@ -312,12 +180,14 @@ async function getUserByUsername(username) {
   return users.find(u => u.username === username);
 }
 
+// Generate consistent chat ID for two users
 function generateChatId(user1Id, user2Id) {
+  // Sort IDs to ensure consistent chat ID regardless of order
   const sortedIds = [user1Id, user2Id].sort();
   return `${sortedIds[0]}_${sortedIds[1]}`;
 }
 
-// Chat management functions (same as before - keeping existing functionality)
+// Chat management functions
 async function getChatInfo(chatId) {
   const chats = await loadJSON('private/messages/chats.json');
   return chats.find(chat => chat.id === chatId);
@@ -327,11 +197,13 @@ async function createChat(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
   const chats = await loadJSON('private/messages/chats.json');
   
+  // Check if chat already exists
   const existingChat = chats.find(chat => chat.id === chatId);
   if (existingChat) {
     return existingChat;
   }
   
+  // Create new chat record
   const newChat = {
     id: chatId,
     participants: [user1Id, user2Id],
@@ -342,6 +214,7 @@ async function createChat(user1Id, user2Id) {
   chats.push(newChat);
   await saveJSON('private/messages/chats.json', chats);
   
+  // Create chat directory and file
   const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
   await fs.mkdir(chatDir, { recursive: true });
   
@@ -351,6 +224,7 @@ async function createChat(user1Id, user2Id) {
   return newChat;
 }
 
+// Simplified function to load ALL messages for a chat (max 250)
 async function getMessagesForUsers(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
   const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
@@ -359,13 +233,15 @@ async function getMessagesForUsers(user1Id, user2Id) {
     const data = await fs.readFile(chatFile, 'utf8');
     const messages = JSON.parse(data);
     
+    // Sort by timestamp (oldest first for display)
     return messages.sort((a, b) => a.timestamp - b.timestamp);
   } catch (error) {
+    // Chat doesn't exist yet, return empty array
     return [];
   }
 }
 
-// Message cleanup functions (same as before)
+// Enhanced message cleanup function
 async function cleanupOldMessages() {
   console.log('Starting message cleanup...');
   const now = Date.now();
@@ -384,9 +260,11 @@ async function cleanupOldMessages() {
         const messages = JSON.parse(data);
         const initialCount = messages.length;
         
+        // Separate messages to keep and delete based on BOTH time and count
         const messagesToDelete = messages.filter(msg => msg.timestamp < cutoffTime);
         let messagesToKeep = messages.filter(msg => msg.timestamp >= cutoffTime);
         
+        // Delete associated media files for old messages
         for (const message of messagesToDelete) {
           if (message.type === 'image' || message.type === 'video') {
             try {
@@ -396,16 +274,20 @@ async function cleanupOldMessages() {
               await fs.unlink(filePath);
               filesDeleted++;
             } catch (error) {
+              // File might already be deleted or not exist
               console.log(`Could not delete media file ${message.content}: ${error.message}`);
             }
           }
         }
         
+        // Apply message count limit as well (keep most recent messages)
         if (messagesToKeep.length > MAX_MESSAGES_PER_CHAT) {
+          // Sort by timestamp and keep the most recent ones
           messagesToKeep.sort((a, b) => b.timestamp - a.timestamp);
           const excessMessages = messagesToKeep.slice(MAX_MESSAGES_PER_CHAT);
           messagesToKeep = messagesToKeep.slice(0, MAX_MESSAGES_PER_CHAT);
           
+          // Delete media files for excess messages too
           for (const message of excessMessages) {
             if (message.type === 'image' || message.type === 'video') {
               try {
@@ -421,6 +303,7 @@ async function cleanupOldMessages() {
           }
         }
         
+        // Save cleaned messages back to file
         if (messagesToKeep.length !== initialCount) {
           await fs.writeFile(chatFile, JSON.stringify(messagesToKeep, null, 2));
           const deletedCount = initialCount - messagesToKeep.length;
@@ -443,6 +326,7 @@ async function cleanupOldMessages() {
   }
 }
 
+// Enhanced function to clean up orphaned media files
 async function cleanupOrphanedMediaFiles() {
   console.log('Starting orphaned media cleanup...');
   let orphanedFiles = 0;
@@ -451,6 +335,7 @@ async function cleanupOrphanedMediaFiles() {
     const chats = await loadJSON('private/messages/chats.json');
     const referencedFiles = new Set();
     
+    // Collect all referenced media files from all chats
     for (const chat of chats) {
       try {
         const messages = await getMessagesForUsers(chat.participants[0], chat.participants[1]);
@@ -464,6 +349,7 @@ async function cleanupOrphanedMediaFiles() {
       }
     }
     
+    // Check pictures directory
     try {
       const pictureFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'pictures'));
       for (const file of pictureFiles) {
@@ -481,6 +367,7 @@ async function cleanupOrphanedMediaFiles() {
       console.error('Error reading pictures directory:', error);
     }
     
+    // Check videos directory
     try {
       const videoFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'videos'));
       for (const file of videoFiles) {
@@ -508,19 +395,25 @@ async function cleanupOrphanedMediaFiles() {
 async function saveMessageToChat(user1Id, user2Id, message) {
   const chatId = generateChatId(user1Id, user2Id);
   
+  // Ensure chat exists
   await createChat(user1Id, user2Id);
   
+  // Load existing messages
   const messages = await getMessagesForUsers(user1Id, user2Id);
   
+  // Add new message
   messages.push(message);
   
+  // Sort by timestamp and enforce message limit
   messages.sort((a, b) => a.timestamp - b.timestamp);
   
+  // Keep only the most recent messages if we exceed the limit
   let finalMessages = messages;
   if (messages.length > MAX_MESSAGES_PER_CHAT) {
     const excessMessages = messages.slice(0, messages.length - MAX_MESSAGES_PER_CHAT);
     finalMessages = messages.slice(-MAX_MESSAGES_PER_CHAT);
     
+    // Delete associated files for excess messages
     for (const oldMessage of excessMessages) {
       if (oldMessage.type === 'image' || oldMessage.type === 'video') {
         try {
@@ -536,9 +429,11 @@ async function saveMessageToChat(user1Id, user2Id, message) {
     }
   }
   
+  // Save messages back to chat file
   const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
   await fs.writeFile(chatFile, JSON.stringify(finalMessages, null, 2));
   
+  // Update last message time in chats.json
   const chats = await loadJSON('private/messages/chats.json');
   const chatIndex = chats.findIndex(chat => chat.id === chatId);
   if (chatIndex !== -1) {
@@ -552,8 +447,10 @@ async function deleteMessagesForUsers(user1Id, user2Id) {
   const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
   
   try {
+    // Get all messages first to delete associated files
     const messages = await getMessagesForUsers(user1Id, user2Id);
     
+    // Delete associated files (images/videos)
     for (const message of messages) {
       if (message.type === 'image' || message.type === 'video') {
         try {
@@ -568,9 +465,11 @@ async function deleteMessagesForUsers(user1Id, user2Id) {
       }
     }
     
+    // Delete the entire chat directory
     await fs.rmdir(chatDir, { recursive: true });
     console.log(`Deleted chat directory: ${chatDir}`);
     
+    // Remove chat from chats.json
     const chats = await loadJSON('private/messages/chats.json');
     const filteredChats = chats.filter(chat => chat.id !== chatId);
     await saveJSON('private/messages/chats.json', filteredChats);
@@ -583,6 +482,7 @@ async function deleteMessagesForUsers(user1Id, user2Id) {
 async function deleteMessageById(messageId) {
   const chats = await loadJSON('private/messages/chats.json');
   
+  // Search through all chats to find the message
   for (const chat of chats) {
     const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chat.id, `${chat.id}.json`);
     
@@ -593,6 +493,7 @@ async function deleteMessageById(messageId) {
       if (messageIndex !== -1) {
         const message = messages[messageIndex];
         
+        // Delete file if it's an image or video
         if (message.type === 'image' || message.type === 'video') {
           try {
             const filePath = message.type === 'image' 
@@ -605,12 +506,14 @@ async function deleteMessageById(messageId) {
           }
         }
         
+        // Remove message from array
         messages.splice(messageIndex, 1);
         await fs.writeFile(chatFile, JSON.stringify(messages, null, 2));
         
         return { success: true, message };
       }
     } catch (error) {
+      // Chat file doesn't exist or is corrupted, continue to next chat
       continue;
     }
   }
@@ -627,7 +530,7 @@ async function getFriendshipDetails(user1Id, user2Id) {
   );
 }
 
-// Session management (same as before)
+// Session management
 async function saveSession(token, userId) {
   const sessions = await loadJSON('private/logins/logins.json');
   sessions.push({
@@ -643,6 +546,7 @@ async function getSessionUserId(token) {
   const sessions = await loadJSON('private/logins/logins.json');
   const session = sessions.find(s => s.token === token);
   if (session) {
+    // Update last used
     session.lastUsed = Date.now();
     await saveJSON('private/logins/logins.json', sessions);
     return session.userId;
@@ -663,7 +567,7 @@ async function cleanupOldSessions() {
   await saveJSON('private/logins/logins.json', activeSessions);
 }
 
-// Mute management (same as before)
+// Mute management
 async function saveMute(userId, muteEnd, reason, escalationLevel = 0) {
   const mutes = await loadJSON('private/mutes/mutes.json');
   const existingIndex = mutes.findIndex(m => m.userId === userId);
@@ -724,7 +628,7 @@ async function cleanupExpiredMutes() {
   await saveJSON('private/mutes/mutes.json', activeMutes);
 }
 
-// Ban management (same as before)
+// Ban management
 async function banUser(userId, reason = 'Banned by admin') {
   const users = await loadJSON('private/users/users.json');
   const userIndex = users.findIndex(u => u.id === userId);
@@ -739,6 +643,7 @@ async function banUser(userId, reason = 'Banned by admin') {
   
   await saveJSON('private/users/users.json', users);
   
+  // Kick user if online
   const userConnection = Array.from(activeUsers.values()).find(u => u.user.id === userId);
   if (userConnection) {
     io.to(userConnection.socket).emit('banned', { reason });
@@ -765,39 +670,13 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
-// Server-relayed voice calling functions (REPLACED WebRTC)
-function endCall(callId, reason) {
-  const call = activeCalls.get(callId);
-  if (!call) return;
-  
-  const callerSocket = getSocketByUserId(call.caller);
-  const receiverSocket = getSocketByUserId(call.receiver);
-  
-  const duration = call.answeredTime ? Date.now() - call.answeredTime : 0;
-  
-  callTimeTracking.delete(callId);
-  audioStreams.delete(callId); // Clean up audio streams
-  
-  if (callerSocket) {
-    callerSocket.emit('call_ended', { callId, reason, duration });
-  }
-  
-  if (receiverSocket) {
-    receiverSocket.emit('call_ended', { callId, reason, duration });
-  }
-  
-  activeCalls.delete(callId);
-  userCalls.delete(call.caller);
-  userCalls.delete(call.receiver);
-  
-  console.log(`Server-relayed call ${callId} ended: ${reason}, duration: ${duration}ms`);
-}
-
+// Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
     const friends = await loadJSON('private/friends/friends.json');
     const chats = await loadJSON('private/messages/chats.json');
     
+    // Update friends list
     const userFriends = friends.filter(f => 
       (f.user1 === userId || f.user2 === userId) && f.status === 'accepted'
     );
@@ -807,6 +686,7 @@ async function sendUpdatedUserLists(socket, userId) {
         const friendId = friendship.user1 === userId ? friendship.user2 : friendship.user1;
         const friendUser = await getUserById(friendId);
         
+        // Find the chat for this friendship to get lastMessage timestamp
         const chatId = generateChatId(userId, friendId);
         const chat = chats.find(c => c.id === chatId);
         const lastMessage = chat ? chat.lastMessage : 0;
@@ -823,8 +703,10 @@ async function sendUpdatedUserLists(socket, userId) {
       })
     );
     
+    // Sort friends by lastMessage (most recent first)
     userFriendsWithDetails.sort((a, b) => b.lastMessage - a.lastMessage);
     
+    // Update blocked list
     const blockedUsers = friends.filter(f => 
       f.status === 'blocked' && 
       (f.user1 === userId || f.user2 === userId) &&
@@ -850,12 +732,13 @@ async function sendUpdatedUserLists(socket, userId) {
   }
 }
 
+// Helper function to get socket by user ID
 function getSocketByUserId(userId) {
   const userConnection = Array.from(activeUsers.values()).find(u => u.user.id === userId);
   return userConnection ? io.sockets.sockets.get(userConnection.socket) : null;
 }
 
-// Rate limiting functions (same as before)
+// Rate limiting functions
 function checkMessageLimit(userId) {
   const now = Date.now();
   if (!messageLimits.has(userId)) {
@@ -870,36 +753,47 @@ function checkMessageLimit(userId) {
   
   const userLimits = messageLimits.get(userId);
   
+  // Check 2-second gap between messages
   if (now - userLimits.lastMessage < 2000) {
     return { allowed: false, reason: 'Please wait 2 seconds between messages' };
   }
   
+  // Clean old messages (older than 30 seconds)
   userLimits.messages = userLimits.messages.filter(time => now - time < 30000);
   
+  // Check if warnings should be reset (5 minutes of good behavior)
   if (userLimits.warningsResetTime > 0 && now - userLimits.warningsResetTime > WARNING_RESET_TIME) {
     userLimits.warnings = [];
     userLimits.warningsResetTime = 0;
     userLimits.escalationLevel = 0;
   }
   
+  // Check 5 messages in 30 seconds
   if (userLimits.messages.length >= 5) {
+    // Add warning
     userLimits.warnings.push(now);
     
+    // If this is the first warning after a reset, start the reset timer
     if (userLimits.warnings.length === 1) {
       userLimits.warningsResetTime = now;
     }
     
+    // Check if user should be muted (3 warnings)
     if (userLimits.warnings.length >= 3) {
       const muteLevel = userLimits.escalationLevel;
       let muteDuration, reason;
       
+      // Fixed escalation system: 0→1min, 1→1min, 2+→1hour
       if (muteLevel === 0) {
+        // First mute
         muteDuration = FIRST_MUTE_DURATION;
         reason = 'First spam mute (1 minute)';
       } else if (muteLevel === 1) {
+        // Second mute
         muteDuration = FIRST_MUTE_DURATION;
         reason = 'Second spam mute (1 minute)';
       } else {
+        // Third+ mute
         muteDuration = ESCALATED_MUTE_DURATION;
         reason = 'Repeated spam violation (1 hour)';
       }
@@ -907,8 +801,10 @@ function checkMessageLimit(userId) {
       const muteEnd = now + muteDuration;
       saveMute(userId, muteEnd, reason, muteLevel);
       
+      // Increment escalation level AFTER determining mute duration
       userLimits.escalationLevel++;
       
+      // Reset warnings and messages
       userLimits.warnings = [];
       userLimits.messages = [];
       userLimits.warningsResetTime = 0;
@@ -929,6 +825,7 @@ function checkMessageLimit(userId) {
 }
 
 function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
+  // Owner has no upload limits
   if (userRole === 'owner') {
     return { allowed: true };
   }
@@ -940,18 +837,22 @@ function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
   
   const userLimits = uploadLimits.get(userId);
   
-  userLimits.uploads = userLimits.uploads.filter(time => now - time < 60000);
-  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000);
+  // Clean old uploads
+  userLimits.uploads = userLimits.uploads.filter(time => now - time < 60000); // 1 minute
+  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
   
+  // Check daily limit (5 per day)
   if (userLimits.dailyUploads.length >= 5) {
     return { allowed: false, reason: 'Daily upload limit reached (5 files per day)' };
   }
   
+  // Check 30-minute limit (3 files)
   const recent30min = userLimits.uploads.filter(time => now - time < 1800000);
   if (recent30min.length >= 3) {
     return { allowed: false, reason: 'Upload limit reached (3 files per 30 minutes)' };
   }
   
+  // Check 1-minute limit (1 file)
   if (userLimits.uploads.length >= 1) {
     return { allowed: false, reason: 'Please wait 1 minute between uploads' };
   }
@@ -979,45 +880,7 @@ async function isUserMuted(userId) {
   return mute !== undefined;
 }
 
-// Real-time call time update function
-async function sendCallTimeUpdate(callId) {
-  const call = activeCalls.get(callId);
-  if (!call || call.status !== 'active') return;
-  
-  try {
-    const callerSocket = getSocketByUserId(call.caller);
-    const receiverSocket = getSocketByUserId(call.receiver);
-    
-    const callerRemainingTime = await getUserRemainingCallTime(call.caller);
-    const receiverRemainingTime = await getUserRemainingCallTime(call.receiver);
-    
-    if (callerSocket) {
-      callerSocket.emit('call_time_update', { 
-        callId, 
-        remainingTime: callerRemainingTime,
-        partnerRemainingTime: receiverRemainingTime
-      });
-    }
-    
-    if (receiverSocket) {
-      receiverSocket.emit('call_time_update', { 
-        callId, 
-        remainingTime: receiverRemainingTime,
-        partnerRemainingTime: callerRemainingTime 
-      });
-    }
-    
-    if ((callerRemainingTime === 0 && callerRemainingTime !== -1) || 
-        (receiverRemainingTime === 0 && receiverRemainingTime !== -1)) {
-      endCall(callId, 'time_limit_reached');
-    }
-    
-  } catch (error) {
-    console.error('Error sending call time update:', error);
-  }
-}
-
-// Socket.IO connection handling with server-relayed audio
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
@@ -1026,6 +889,7 @@ io.on('connection', (socket) => {
       const { username, password, sessionToken } = data;
       let user = null;
       
+      // Try session token first
       if (sessionToken) {
         const userId = await getSessionUserId(sessionToken);
         if (userId) {
@@ -1033,11 +897,13 @@ io.on('connection', (socket) => {
         }
       }
       
+      // If no valid session, try username/password
       if (!user && username && password) {
         const users = await loadJSON('private/users/users.json');
         user = users.find(u => u.username === username && u.password === password);
         
         if (user) {
+          // Create new session
           const token = generateSessionToken();
           await saveSession(token, user.id);
           socket.emit('session_token', token);
@@ -1054,6 +920,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check active user limit - NO MORE QUEUE, just reject
       if (activeUsers.size >= MAX_ACTIVE_USERS && !activeUsers.has(user.id)) {
         socket.emit('auth_error', `Server is currently full (${MAX_ACTIVE_USERS}/${MAX_ACTIVE_USERS} users). Please try again later.`);
         return;
@@ -1061,28 +928,22 @@ io.on('connection', (socket) => {
       
       activeUsers.set(user.id, { socket: socket.id, lastActive: Date.now(), user });
       socket.userId = user.id;
+      socket.emit('authenticated', { user: { ...user, password: undefined } });
       
-      const remainingCallTime = await getUserRemainingCallTime(user.id);
-      const currentPeriod = getCurrentDynamicWeek();
-      
-      socket.emit('authenticated', { 
-        user: { ...user, password: undefined },
-        callTimeRemaining: remainingCallTime,
-        currentWeekInfo: currentPeriod
-      });
-      
-      // Load and send friends list with full user details
+      // Load and send friends list with full user details - SORTED BY LAST MESSAGE
       const friends = await loadJSON('private/friends/friends.json');
       const chats = await loadJSON('private/messages/chats.json');
       const userFriends = friends.filter(f => 
         (f.user1 === user.id || f.user2 === user.id) && f.status === 'accepted'
       );
       
+      // Populate friend details with lastMessage for sorting
       const friendsWithDetails = await Promise.all(
         userFriends.map(async (friendship) => {
           const friendId = friendship.user1 === user.id ? friendship.user2 : friendship.user1;
           const friendUser = await getUserById(friendId);
           
+          // Find the chat for this friendship to get lastMessage timestamp
           const chatId = generateChatId(user.id, friendId);
           const chat = chats.find(c => c.id === chatId);
           const lastMessage = chat ? chat.lastMessage : 0;
@@ -1099,8 +960,10 @@ io.on('connection', (socket) => {
         })
       );
       
+      // Sort friends by lastMessage (most recent first)
       friendsWithDetails.sort((a, b) => b.lastMessage - a.lastMessage);
       
+      // Load pending friend requests
       const pendingRequests = friends.filter(f => 
         f.user2 === user.id && f.status === 'pending'
       );
@@ -1115,6 +978,7 @@ io.on('connection', (socket) => {
         })
       );
       
+      // Load blocked users
       const blockedUsers = friends.filter(f => 
         f.status === 'blocked' && 
         (f.user1 === user.id || f.user2 === user.id) &&
@@ -1143,277 +1007,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Server-relayed voice calling handlers (REPLACED WebRTC handlers)
-  socket.on('initiate_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { friendId } = data;
-      const callerId = socket.userId;
-      
-      if (await isUserMuted(callerId)) {
-        socket.emit('call_error', 'You are currently muted');
-        return;
-      }
-      
-      if (!(await canUserStartCall(callerId))) {
-        socket.emit('call_error', 'You have no remaining call time this week');
-        return;
-      }
-      
-      if (!(await canUserStartCall(friendId))) {
-        socket.emit('call_error', 'Your friend has no remaining call time this week');
-        return;
-      }
-      
-      const friends = await loadJSON('private/friends/friends.json');
-      const friendship = friends.find(f => 
-        ((f.user1 === callerId && f.user2 === friendId) ||
-         (f.user1 === friendId && f.user2 === callerId)) &&
-        f.status === 'accepted'
-      );
-      
-      if (!friendship) {
-        socket.emit('call_error', 'Can only call friends');
-        return;
-      }
-      
-      if (userCalls.has(callerId) || userCalls.has(friendId)) {
-        socket.emit('call_error', 'User is already in a call');
-        return;
-      }
-      
-      const friendUser = await getUserById(friendId);
-      if (friendUser?.settings?.allowCalls === false) {
-        socket.emit('call_error', 'This user is not accepting calls');
-        return;
-      }
-      
-      const callId = generateUserId();
-      const call = {
-        id: callId,
-        caller: callerId,
-        receiver: friendId,
-        status: 'ringing',
-        startTime: Date.now()
-      };
-      
-      activeCalls.set(callId, call);
-      userCalls.set(callerId, callId); // Only caller marked as "in call" initially
-      
-      // Initialize audio streams for this call
-      audioStreams.set(callId, {
-        callerStream: [],
-        receiverStream: []
-      });
-      
-      const receiverSocket = getSocketByUserId(friendId);
-      if (receiverSocket) {
-        const callerUser = await getUserById(callerId);
-        receiverSocket.emit('incoming_call', {
-          callId,
-          callerUsername: callerUser.username,
-          callerId,
-          serverRelayed: true // Flag to indicate server-relayed audio
-        });
-      } else {
-        userCalls.delete(callerId);
-        activeCalls.delete(callId);
-        audioStreams.delete(callId);
-        socket.emit('call_error', 'User is not online');
-        return;
-      }
-      
-      socket.emit('call_initiated', { callId, status: 'ringing', serverRelayed: true });
-      
-      setTimeout(() => {
-        const currentCall = activeCalls.get(callId);
-        if (currentCall && currentCall.status === 'ringing') {
-          userCalls.delete(callerId);
-          endCall(callId, 'timeout');
-        }
-      }, 30000);
-      
-    } catch (error) {
-      console.error('Initiate call error:', error);
-      socket.emit('call_error', 'Failed to initiate call');
-    }
-  });
-  
-  socket.on('answer_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, accept } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.receiver !== socket.userId) {
-        socket.emit('call_error', 'Invalid call');
-        return;
-      }
-      
-      if (accept) {
-        if (!(await canUserStartCall(call.caller)) || !(await canUserStartCall(call.receiver))) {
-          userCalls.delete(call.caller);
-          endCall(callId, 'insufficient_time');
-          return;
-        }
-        
-        userCalls.set(call.receiver, callId); // Now mark receiver as "in call"
-        
-        call.status = 'active';
-        call.answeredTime = Date.now();
-        
-        callTimeTracking.set(callId, {
-          startTime: Date.now(),
-          lastUpdate: Date.now()
-        });
-        
-        const callerSocket = getSocketByUserId(call.caller);
-        const receiverSocket = getSocketByUserId(call.receiver);
-        
-        if (callerSocket) {
-          callerSocket.emit('call_answered', { callId, serverRelayed: true });
-        }
-        
-        socket.emit('call_connected', { callId, serverRelayed: true });
-        
-        // Start real-time time updates
-        const timeUpdateInterval = setInterval(async () => {
-          const currentCall = activeCalls.get(callId);
-          if (!currentCall || currentCall.status !== 'active') {
-            clearInterval(timeUpdateInterval);
-            return;
-          }
-          
-          const tracking = callTimeTracking.get(callId);
-          if (tracking) {
-            const now = Date.now();
-            const timeSinceLastUpdate = now - tracking.lastUpdate;
-            
-            await updateUserCallTime(call.caller, timeSinceLastUpdate);
-            await updateUserCallTime(call.receiver, timeSinceLastUpdate);
-            
-            tracking.lastUpdate = now;
-            
-            await sendCallTimeUpdate(callId);
-          }
-        }, 1000);
-        
-      } else {
-        userCalls.delete(call.caller);
-        endCall(callId, 'declined');
-      }
-      
-    } catch (error) {
-      console.error('Answer call error:', error);
-      socket.emit('call_error', 'Failed to answer call');
-    }
-  });
-  
-  socket.on('end_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      if (call.caller !== socket.userId && call.receiver !== socket.userId) {
-        socket.emit('call_error', 'You are not in this call');
-        return;
-      }
-      
-      const tracking = callTimeTracking.get(callId);
-      if (tracking && call.status === 'active') {
-        const now = Date.now();
-        const finalTime = now - tracking.lastUpdate;
-        await updateUserCallTime(call.caller, finalTime);
-        await updateUserCallTime(call.receiver, finalTime);
-      }
-      
-      endCall(callId, 'ended');
-      
-    } catch (error) {
-      console.error('End call error:', error);
-      socket.emit('call_error', 'Failed to end call');
-    }
-  });
-  
-  socket.on('get_call_time', async () => {
-    try {
-      if (!socket.userId) return;
-      
-      const remainingTime = await getUserRemainingCallTime(socket.userId);
-      const currentPeriod = getCurrentDynamicWeek();
-      
-      socket.emit('call_time_remaining', { 
-        remainingTime,
-        weekInfo: currentPeriod
-      });
-      
-    } catch (error) {
-      console.error('Get call time error:', error);
-    }
-  });
-  
-  // Server-relayed audio streaming handlers (REPLACED WebRTC signaling)
-  socket.on('audio_stream', (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, audioData } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.status !== 'active') return;
-      if (call.caller !== socket.userId && call.receiver !== socket.userId) return;
-      
-      // Relay audio to the other participant
-      const otherUserId = call.caller === socket.userId ? call.receiver : call.caller;
-      const otherSocket = getSocketByUserId(otherUserId);
-      
-      if (otherSocket) {
-        // Simple bandwidth limiting: limit audio chunks to 32kbps equivalent
-        const maxChunkSize = Math.floor(AUDIO_BITRATE / 8 / (1000 / AUDIO_CHUNK_INTERVAL));
-        
-        if (audioData && audioData.length <= maxChunkSize) {
-          otherSocket.emit('audio_stream', { callId, audioData });
-        }
-      }
-      
-    } catch (error) {
-      console.error('Audio stream error:', error);
-    }
-  });
-  
-  socket.on('audio_settings', (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, muted, volume } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.status !== 'active') return;
-      if (call.caller !== socket.userId && call.receiver !== socket.userId) return;
-      
-      // Relay audio settings to the other participant
-      const otherUserId = call.caller === socket.userId ? call.receiver : call.caller;
-      const otherSocket = getSocketByUserId(otherUserId);
-      
-      if (otherSocket) {
-        otherSocket.emit('audio_settings', { callId, partnerMuted: muted, partnerVolume: volume });
-      }
-      
-    } catch (error) {
-      console.error('Audio settings error:', error);
-    }
-  });
-  
-  // All other socket handlers remain the same (messaging, friend management, etc.)
+  // Simplified load_messages - loads ALL messages (max 250)
   socket.on('load_messages', async (data) => {
     try {
       if (!socket.userId) return;
@@ -1441,6 +1035,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Find the message first to check permissions
       const chats = await loadJSON('private/messages/chats.json');
       let foundMessage = null;
       let messageSender = null;
@@ -1460,13 +1055,17 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if user can delete this message
       let canDelete = false;
       
       if (foundMessage.senderId === socket.userId) {
+        // Users can always delete their own messages
         canDelete = true;
       } else if (currentUser.role === 'owner') {
+        // Owner can delete any message
         canDelete = true;
       } else if (currentUser.role === 'admin' && messageSender && messageSender.role !== 'owner') {
+        // Admin can delete messages from non-owners
         canDelete = true;
       }
       
@@ -1475,9 +1074,11 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Delete the message
       const result = await deleteMessageById(messageId);
       
       if (result.success) {
+        // Notify both users about the deletion
         const senderId = foundMessage.senderId;
         const receiverId = foundMessage.receiverId;
         
@@ -1508,11 +1109,13 @@ io.on('connection', (socket) => {
       
       const { receiverId, content } = data;
       
+      // Check if user is muted
       if (await isUserMuted(socket.userId)) {
         socket.emit('message_error', 'You are currently muted');
         return;
       }
       
+      // Check message length limit
       if (!content || content.trim().length === 0) {
         socket.emit('message_error', 'Message cannot be empty');
         return;
@@ -1523,12 +1126,14 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check rate limits
       const limitCheck = checkMessageLimit(socket.userId);
       if (!limitCheck.allowed) {
         socket.emit('message_error', limitCheck.reason);
         return;
       }
       
+      // Verify friendship and not blocked
       const friends = await loadJSON('private/friends/friends.json');
       const friendship = friends.find(f => 
         ((f.user1 === socket.userId && f.user2 === receiverId) ||
@@ -1540,6 +1145,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Create message
       const message = {
         id: generateUserId(),
         senderId: socket.userId,
@@ -1549,8 +1155,10 @@ io.on('connection', (socket) => {
         timestamp: Date.now()
       };
       
+      // Save message to chat
       await saveMessageToChat(socket.userId, receiverId, message);
       
+      // Send to receiver if online
       const receiverSocket = getSocketByUserId(receiverId);
       if (receiverSocket) {
         receiverSocket.emit('new_message', message);
@@ -1570,6 +1178,7 @@ io.on('connection', (socket) => {
       
       const { username } = data;
       
+      // Check friend request cooldown
       const cooldownCheck = checkFriendRequestCooldown(socket.userId);
       if (!cooldownCheck.allowed) {
         socket.emit('friend_request_error', cooldownCheck.reason);
@@ -1588,6 +1197,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if target user allows friend requests
       if (targetUser.settings && targetUser.settings.allowFriendRequests === false) {
         socket.emit('friend_request_error', 'This user is not accepting friend requests');
         return;
@@ -1595,6 +1205,7 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
+      // Check if already friends or request exists
       const existing = friends.find(f => 
         (f.user1 === socket.userId && f.user2 === targetUser.id) ||
         (f.user1 === targetUser.id && f.user2 === socket.userId)
@@ -1613,8 +1224,10 @@ io.on('connection', (socket) => {
         }
       }
       
+      // Set cooldown
       friendRequestCooldowns.set(socket.userId, Date.now());
       
+      // Add friend request
       const friendRequest = {
         id: generateUserId(),
         user1: socket.userId,
@@ -1626,6 +1239,7 @@ io.on('connection', (socket) => {
       friends.push(friendRequest);
       await saveJSON('private/friends/friends.json', friends);
       
+      // Notify target user if online
       const targetSocket = getSocketByUserId(targetUser.id);
       if (targetSocket) {
         const sender = await getUserById(socket.userId);
@@ -1664,11 +1278,12 @@ io.on('connection', (socket) => {
         friends[requestIndex].status = 'accepted';
         friends[requestIndex].acceptedAt = Date.now();
       } else {
-        friends.splice(requestIndex, 1);
+        friends.splice(requestIndex, 1); // Remove the request
       }
       
       await saveJSON('private/friends/friends.json', friends);
       
+      // Notify the sender if online
       const senderSocket = getSocketByUserId(request.user1);
       if (senderSocket) {
         if (accept) {
@@ -1678,14 +1293,17 @@ io.on('connection', (socket) => {
             userId: socket.userId
           });
           
+          // Send updated friends list to sender
           await sendUpdatedUserLists(senderSocket, request.user1);
         }
       }
       
       if (accept) {
+        // Send updated friends list to accepter
         await sendUpdatedUserLists(socket, socket.userId);
       }
       
+      // Send updated pending requests
       const remainingRequests = friends.filter(f => 
         f.user2 === socket.userId && f.status === 'pending'
       );
@@ -1717,18 +1335,22 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
+      // Delete all messages between the users immediately (including files and chat folder)
       await deleteMessagesForUsers(socket.userId, targetUserId);
       
+      // Find existing relationship
       const relationshipIndex = friends.findIndex(f => 
         (f.user1 === socket.userId && f.user2 === targetUserId) ||
         (f.user1 === targetUserId && f.user2 === socket.userId)
       );
       
       if (relationshipIndex !== -1) {
+        // Update existing relationship to blocked
         friends[relationshipIndex].status = 'blocked';
         friends[relationshipIndex].blockedBy = socket.userId;
         friends[relationshipIndex].blockedAt = Date.now();
       } else {
+        // Create new blocked relationship
         const blockRecord = {
           id: generateUserId(),
           user1: socket.userId,
@@ -1742,6 +1364,7 @@ io.on('connection', (socket) => {
       
       await saveJSON('private/friends/friends.json', friends);
       
+      // Update friends list and blocked list
       await sendUpdatedUserLists(socket, socket.userId);
       
       socket.emit('user_blocked', { userId: targetUserId });
@@ -1760,6 +1383,7 @@ io.on('connection', (socket) => {
       
       const friends = await loadJSON('private/friends/friends.json');
       
+      // Remove block relationship where current user blocked the target
       const filteredFriends = friends.filter(f => 
         !((f.user1 === socket.userId && f.user2 === targetUserId) ||
           (f.user1 === targetUserId && f.user2 === socket.userId)) ||
@@ -1769,6 +1393,7 @@ io.on('connection', (socket) => {
       
       await saveJSON('private/friends/friends.json', filteredFriends);
       
+      // Update blocked list
       const remainingBlocked = filteredFriends.filter(f => 
         f.status === 'blocked' && 
         (f.user1 === socket.userId || f.user2 === socket.userId) &&
@@ -1814,29 +1439,32 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if current user can perform admin actions on target user
       if (!canAdminAction(currentUser, targetUser)) {
         socket.emit('message_error', 'You do not have permission to mute this user');
         return;
       }
       
+      // Parse duration
       let muteDuration;
       switch (duration) {
         case '1h':
-          muteDuration = 60 * 60 * 1000;
+          muteDuration = 60 * 60 * 1000; // 1 hour
           break;
         case '1d':
-          muteDuration = 24 * 60 * 60 * 1000;
+          muteDuration = 24 * 60 * 60 * 1000; // 1 day
           break;
         case '1w':
-          muteDuration = 7 * 24 * 60 * 60 * 1000;
+          muteDuration = 7 * 24 * 60 * 60 * 1000; // 1 week
           break;
         default:
-          muteDuration = 60 * 60 * 1000;
+          muteDuration = 60 * 60 * 1000; // default 1 hour
       }
       
       const muteEnd = Date.now() + muteDuration;
       await saveAdminMute(userId, muteEnd, reason || 'Muted by admin');
       
+      // Notify target user if online
       const targetSocket = getSocketByUserId(userId);
       if (targetSocket) {
         targetSocket.emit('muted', { 
@@ -1872,6 +1500,7 @@ io.on('connection', (socket) => {
         return;
       }
       
+      // Check if current user can perform admin actions on target user
       if (!canAdminAction(currentUser, targetUser)) {
         socket.emit('message_error', 'You do not have permission to ban this user');
         return;
@@ -1891,11 +1520,12 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Updated settings handler with notifications support
   socket.on('update_settings', async (data) => {
     try {
       if (!socket.userId) return;
       
-      const { allowFriendRequests, allowNotifications, allowCalls } = data;
+      const { allowFriendRequests, allowNotifications } = data;
       
       const users = await loadJSON('private/users/users.json');
       const userIndex = users.findIndex(u => u.id === socket.userId);
@@ -1909,6 +1539,7 @@ io.on('connection', (socket) => {
         users[userIndex].settings = {};
       }
       
+      // Update settings
       if (allowFriendRequests !== undefined) {
         users[userIndex].settings.allowFriendRequests = allowFriendRequests;
       }
@@ -1917,16 +1548,11 @@ io.on('connection', (socket) => {
         users[userIndex].settings.allowNotifications = allowNotifications;
       }
       
-      if (allowCalls !== undefined) {
-        users[userIndex].settings.allowCalls = allowCalls;
-      }
-      
       await saveJSON('private/users/users.json', users);
       
       socket.emit('settings_updated', { 
         allowFriendRequests: users[userIndex].settings.allowFriendRequests,
-        allowNotifications: users[userIndex].settings.allowNotifications,
-        allowCalls: users[userIndex].settings.allowCalls
+        allowNotifications: users[userIndex].settings.allowNotifications
       });
       
     } catch (error) {
@@ -1937,21 +1563,7 @@ io.on('connection', (socket) => {
   
   socket.on('logout', async () => {
     if (socket.userId) {
-      const callId = userCalls.get(socket.userId);
-      if (callId) {
-        const call = activeCalls.get(callId);
-        if (call) {
-          const tracking = callTimeTracking.get(callId);
-          if (tracking && call.status === 'active') {
-            const now = Date.now();
-            const finalTime = now - tracking.lastUpdate;
-            await updateUserCallTime(call.caller, finalTime);
-            await updateUserCallTime(call.receiver, finalTime);
-          }
-          endCall(callId, 'disconnected');
-        }
-      }
-      
+      // Remove all sessions for this user
       await deleteUserSessions(socket.userId);
       
       activeUsers.delete(socket.userId);
@@ -1965,17 +1577,12 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
-      const callId = userCalls.get(socket.userId);
-      if (callId) {
-        endCall(callId, 'disconnected');
-      }
-      
       activeUsers.delete(socket.userId);
     }
   });
 });
 
-// API Routes (same as before but with updated call time limits)
+// API Routes
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -1993,15 +1600,14 @@ app.post('/api/register', async (req, res) => {
     const user = {
       id: generateUserId(),
       username,
-      password,
+      password, // In production, hash this password!
       tier: 1,
       role: 'user',
       banned: false,
       created: Date.now(),
       settings: {
         allowFriendRequests: true,
-        allowNotifications: true,
-        allowCalls: true
+        allowNotifications: true // Default notifications enabled
       }
     };
     
@@ -2016,6 +1622,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// Fixed upload endpoint that validates BEFORE saving files
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   let savedFilePath = null;
   
@@ -2031,6 +1638,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const userId = req.body.userId;
     const receiverId = req.body.receiverId;
     
+    // Check user tier
     const users = await loadJSON('private/users/users.json');
     const user = users.find(u => u.id === userId);
     
@@ -2041,6 +1649,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const userTier = getUserTier(user);
     const isVideo = req.file.mimetype.startsWith('video/');
     
+    // Owner bypasses all tier restrictions
     if (user.role !== 'owner') {
       if (userTier < 2) {
         return res.status(403).json({ error: 'Insufficient tier for file uploads (Need Tier 2+)' });
@@ -2051,15 +1660,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       }
     }
     
+    // Check if user is muted
     if (await isUserMuted(userId)) {
       return res.status(403).json({ error: 'You are currently muted' });
     }
     
+    // Check upload limits (owners bypass this)
     const limitCheck = checkUploadLimit(userId, isVideo, user.role);
     if (!limitCheck.allowed) {
       return res.status(429).json({ error: limitCheck.reason });
     }
     
+    // Verify friendship
     const friends = await loadJSON('private/friends/friends.json');
     const friendship = friends.find(f => 
       ((f.user1 === userId && f.user2 === receiverId) ||
@@ -2071,6 +1683,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(403).json({ error: 'Can only send files to friends' });
     }
     
+    // All validations passed, now save the file to disk
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const filename = uniqueSuffix + path.extname(req.file.originalname);
     const dir = isVideo ? 'private/messages/videos/' : 'private/messages/pictures/';
@@ -2078,6 +1691,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     await fs.writeFile(savedFilePath, req.file.buffer);
     
+    // Create message record
     const message = {
       id: generateUserId(),
       senderId: userId,
@@ -2087,8 +1701,10 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       timestamp: Date.now()
     };
     
+    // Save message to chat
     await saveMessageToChat(userId, receiverId, message);
     
+    // Send real-time message to both sender and receiver
     const senderSocket = getSocketByUserId(userId);
     const receiverSocket = getSocketByUserId(receiverId);
     
@@ -2105,6 +1721,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   } catch (error) {
     console.error('Upload error:', error);
     
+    // Clean up saved file if there was an error after saving
     if (savedFilePath) {
       try {
         await fs.unlink(savedFilePath);
@@ -2118,16 +1735,19 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
+// Serve media files
 app.get('/api/media/:filename', async (req, res) => {
   const filename = req.params.filename;
   const imagePath = path.join(__dirname, 'private', 'messages', 'pictures', filename);
   const videoPath = path.join(__dirname, 'private', 'messages', 'videos', filename);
   
   try {
+    // Try image path first
     await fs.access(imagePath);
     res.sendFile(imagePath);
   } catch {
     try {
+      // Then try video path
       await fs.access(videoPath);
       res.sendFile(videoPath);
     } catch {
@@ -2136,7 +1756,7 @@ app.get('/api/media/:filename', async (req, res) => {
   }
 });
 
-// Admin API Routes (same as before)
+// Admin API Routes
 app.use('/api/admin', (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== ADMIN_API_KEY) {
@@ -2150,11 +1770,12 @@ app.get('/api/admin/users', async (req, res) => {
     const users = await loadJSON('private/users/users.json');
     const mutes = await loadJSON('private/mutes/mutes.json');
     
+    // Add mute status to users
     const usersWithMuteStatus = users.map(user => {
       const activeMute = mutes.find(m => m.userId === user.id && m.muteEnd > Date.now());
       return {
         ...user,
-        password: undefined,
+        password: undefined, // Don't send passwords
         muted: !!activeMute,
         muteEnd: activeMute ? activeMute.muteEnd : null,
         muteReason: activeMute ? activeMute.reason : null
@@ -2225,10 +1846,14 @@ app.post('/api/admin/users/:userId/ban', async (req, res) => {
     const { userId } = req.params;
     const { reason } = req.body;
     
+    // Get target user to check if they are owner
     const targetUser = await getUserById(userId);
     if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
     }
+    
+    // Only API can ban owners (not socket-based admin actions)
+    // This allows owners to be banned via API but not through normal admin interface
     
     const result = await banUser(userId, reason);
     
@@ -2265,29 +1890,33 @@ app.post('/api/admin/users/:userId/mute', async (req, res) => {
     const { userId } = req.params;
     const { duration, reason } = req.body;
     
+    // Get target user to check permissions
     const targetUser = await getUserById(userId);
     if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // API can mute anyone, but let's still respect the hierarchy for consistency
+    // Parse duration
     let muteDuration;
     switch (duration) {
       case '1h':
-        muteDuration = 60 * 60 * 1000;
+        muteDuration = 60 * 60 * 1000; // 1 hour
         break;
       case '1d':
-        muteDuration = 24 * 60 * 60 * 1000;
+        muteDuration = 24 * 60 * 60 * 1000; // 1 day
         break;
       case '1w':
-        muteDuration = 7 * 24 * 60 * 60 * 1000;
+        muteDuration = 7 * 24 * 60 * 60 * 1000; // 1 week
         break;
       default:
-        muteDuration = 60 * 60 * 1000;
+        muteDuration = 60 * 60 * 1000; // default 1 hour
     }
     
     const muteEnd = Date.now() + muteDuration;
     await saveAdminMute(userId, muteEnd, reason || 'Muted by admin');
     
+    // Notify target user if online
     const targetSocket = getSocketByUserId(userId);
     if (targetSocket) {
       targetSocket.emit('muted', { 
@@ -2317,6 +1946,7 @@ app.post('/api/admin/users/:userId/unmute', async (req, res) => {
     
     await removeMute(userId);
     
+    // Notify target user if online
     const targetSocket = getSocketByUserId(userId);
     if (targetSocket) {
       targetSocket.emit('unmuted', { message: 'You have been unmuted' });
@@ -2337,7 +1967,7 @@ app.get('/api/admin/backup', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${archiveName}"`);
     
     const archive = archiver('zip', {
-      zlib: { level: 9 }
+      zlib: { level: 9 } // Maximum compression
     });
     
     archive.on('error', (err) => {
@@ -2345,10 +1975,13 @@ app.get('/api/admin/backup', async (req, res) => {
       res.status(500).json({ error: 'Failed to create backup' });
     });
     
+    // Pipe archive data to the response
     archive.pipe(res);
     
+    // Add the entire private directory to the archive
     archive.directory('private/', false);
     
+    // Finalize the archive
     await archive.finalize();
     
   } catch (error) {
@@ -2361,27 +1994,22 @@ app.get('/api/admin/stats', async (req, res) => {
   try {
     const mutes = await loadJSON('private/mutes/mutes.json');
     const activeMutes = mutes.filter(m => m.muteEnd > Date.now());
-    const currentPeriod = getCurrentDynamicWeek();
     
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: activeMutes.length,
-      activeCalls: activeCalls.size,
-      currentWeek: currentPeriod,
-      serverRelayedAudio: true
+      mutedUsers: activeMutes.length
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: 0,
-      activeCalls: activeCalls.size,
-      serverRelayedAudio: true
+      mutedUsers: 0
     });
   }
 });
 
+// Manual cleanup endpoint for admins
 app.post('/api/admin/cleanup', async (req, res) => {
   try {
     console.log('Manual cleanup initiated...');
@@ -2397,7 +2025,7 @@ app.post('/api/admin/cleanup', async (req, res) => {
   }
 });
 
-// Settings API endpoints (same as before)
+// New API endpoints for notifications setting
 app.get('/api/settings', async (req, res) => {
   try {
     const sessionToken = req.headers.authorization?.replace('Bearer ', '');
@@ -2415,15 +2043,9 @@ app.get('/api/settings', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    const remainingCallTime = await getUserRemainingCallTime(userId);
-    const currentPeriod = getCurrentDynamicWeek();
-    
     res.json({
       allowFriendRequests: user.settings?.allowFriendRequests ?? true,
-      allowNotifications: user.settings?.allowNotifications ?? true,
-      allowCalls: user.settings?.allowCalls ?? true,
-      callTimeRemaining: remainingCallTime,
-      currentWeek: currentPeriod
+      allowNotifications: user.settings?.allowNotifications ?? true
     });
     
   } catch (error) {
@@ -2516,74 +2138,19 @@ app.post('/api/settings/friend-requests', async (req, res) => {
   }
 });
 
-app.post('/api/settings/calls', async (req, res) => {
-  try {
-    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
-    if (!sessionToken) {
-      return res.status(401).json({ error: 'No session token provided' });
-    }
-    
-    const userId = await getSessionUserId(sessionToken);
-    if (!userId) {
-      return res.status(401).json({ error: 'Invalid session token' });
-    }
-    
-    const { allowCalls } = req.body;
-    if (typeof allowCalls !== 'boolean') {
-      return res.status(400).json({ error: 'allowCalls must be a boolean' });
-    }
-    
-    const users = await loadJSON('private/users/users.json');
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    if (!users[userIndex].settings) {
-      users[userIndex].settings = {};
-    }
-    
-    users[userIndex].settings.allowCalls = allowCalls;
-    await saveJSON('private/users/users.json', users);
-    
-    res.json({ 
-      message: 'Calls setting updated successfully',
-      allowCalls 
-    });
-    
-  } catch (error) {
-    console.error('Update calls setting error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // Serve main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Enhanced cleanup routines - runs every 30 minutes
+// Enhanced cleanup routines - now runs every 30 minutes
 setInterval(async () => {
   console.log('Running scheduled cleanup...');
   await cleanupOldSessions();
   await cleanupExpiredMutes();
-  await cleanupOldMessages();
-  await cleanupOrphanedMediaFiles();
+  await cleanupOldMessages();  // Clean up old messages
+  await cleanupOrphanedMediaFiles();  // Clean up orphaned files
 }, 30 * 60 * 1000); // Run every 30 minutes
-
-// Periodic cleanup of stale calls - runs every minute
-setInterval(() => {
-  const now = Date.now();
-  const staleCallTimeout = 5 * 60 * 1000; // 5 minutes
-  
-  for (const [callId, call] of activeCalls.entries()) {
-    if (now - call.startTime > staleCallTimeout) {
-      console.log(`Cleaning up stale call: ${callId}`);
-      endCall(callId, 'timeout');
-    }
-  }
-}, 60000); // Check every minute
 
 // Initialize and start server
 async function start() {
@@ -2595,10 +2162,6 @@ async function start() {
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
     console.log(`Message retention: 48 hours`);
     console.log(`Max messages per chat: ${MAX_MESSAGES_PER_CHAT}`);
-    console.log(`Server-relayed voice calls enabled (32kbps)`);
-    console.log(`Updated call time limits: Tier 1: 5h/week, Tier 2: 10h/week, Tier 3: 15h/week`);
-    console.log(`Dynamic week calculation based on days in current month`);
-    console.log(`Bulletproof time tracking with automatic resets`);
   });
 }
 
