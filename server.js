@@ -23,6 +23,11 @@ const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
 const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
 const MAX_MESSAGES_PER_CHAT = 250; // Maximum messages to keep per chat
+const DOCUMENT_UPLOAD_COOLDOWN = 5 * 60 * 1000; // 5 minutes between document uploads
+const MAX_DOCUMENT_SIZE = 50 * 1024; // 50KB
+const MAX_VOICE_SIZE = 2 * 1024 * 1024; // 2MB
+const DAILY_DOCUMENT_LIMIT = 10; // 10 documents per day
+const DAILY_VOICE_LIMIT = 10; // 10 voice messages per day
 
 // Middleware
 app.use(express.json());
@@ -51,16 +56,18 @@ app.use('/api/', apiLimiter);
 const activeUsers = new Map();
 const messageLimits = new Map();
 const uploadLimits = new Map();
+const documentLimits = new Map();
+const voiceLimits = new Map();
 const friendRequestCooldowns = new Map();
+
+// Message cache to prevent ghost messages
+const messageCache = new Map(); // chatId -> messages array
 
 // Ensure directories exist
 async function initializeDirectories() {
   const dirs = [
     'private',
-    'private/messages',
-    'private/messages/chats',
-    'private/messages/pictures',
-    'private/messages/videos',
+    'private/chats',
     'private/users',
     'private/friends',
     'private/logins',
@@ -79,7 +86,7 @@ async function initializeDirectories() {
   
   // Initialize JSON files if they don't exist
   const files = [
-    'private/messages/chats.json',
+    'private/chats.json',
     'private/users/users.json',
     'private/friends/friends.json',
     'private/logins/logins.json',
@@ -101,8 +108,13 @@ const storage = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
   const allowedImages = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   const allowedVideos = ['video/mp4', 'video/webm', 'video/quicktime'];
+  const allowedDocuments = ['text/plain'];
+  const allowedAudio = ['audio/webm']; // ONLY WebM audio files
   
-  if (allowedImages.includes(file.mimetype) || allowedVideos.includes(file.mimetype)) {
+  if (allowedImages.includes(file.mimetype) || 
+      allowedVideos.includes(file.mimetype) || 
+      allowedDocuments.includes(file.mimetype) ||
+      allowedAudio.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Invalid file type'), false);
@@ -113,9 +125,22 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 10 * 1024 * 1024 // 10MB (we'll check specific limits per file type)
   }
 });
+
+// Helper function to validate WebM file
+function validateWebM(buffer) {
+  // Check WebM signature (starts with 1A 45 DF A3)
+  if (buffer.length < 4) return false;
+  
+  // Check for WebM/EBML header
+  if (buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3) {
+    return true;
+  }
+  
+  return false;
+}
 
 // Helper functions
 async function loadJSON(filename) {
@@ -189,13 +214,13 @@ function generateChatId(user1Id, user2Id) {
 
 // Chat management functions
 async function getChatInfo(chatId) {
-  const chats = await loadJSON('private/messages/chats.json');
+  const chats = await loadJSON('private/chats.json');
   return chats.find(chat => chat.id === chatId);
 }
 
 async function createChat(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
-  const chats = await loadJSON('private/messages/chats.json');
+  const chats = await loadJSON('private/chats.json');
   
   // Check if chat already exists
   const existingChat = chats.find(chat => chat.id === chatId);
@@ -212,32 +237,133 @@ async function createChat(user1Id, user2Id) {
   };
   
   chats.push(newChat);
-  await saveJSON('private/messages/chats.json', chats);
+  await saveJSON('private/chats.json', chats);
   
-  // Create chat directory and file
-  const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
+  // Create chat directory structure
+  const chatDir = path.join(__dirname, 'private', 'chats', chatId);
   await fs.mkdir(chatDir, { recursive: true });
   
+  // Create subdirectories for media types
+  const mediaTypes = ['pictures', 'videos', 'documents', 'audios'];
+  for (const mediaType of mediaTypes) {
+    await fs.mkdir(path.join(chatDir, mediaType), { recursive: true });
+  }
+  
+  // Create chat messages file
   const chatFile = path.join(chatDir, `${chatId}.json`);
   await fs.writeFile(chatFile, JSON.stringify([], null, 2));
+  
+  // Initialize cache
+  messageCache.set(chatId, []);
   
   return newChat;
 }
 
-// Simplified function to load ALL messages for a chat (max 250)
+// Helper function to check if a file exists
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Helper function to get the file path for a message within its chat directory
+function getMessageFilePath(message, chatId) {
+  if (!['image', 'video', 'document', 'audio'].includes(message.type)) {
+    return null;
+  }
+  
+  let mediaDir;
+  switch (message.type) {
+    case 'image':
+      mediaDir = 'pictures';
+      break;
+    case 'video':
+      mediaDir = 'videos';
+      break;
+    case 'document':
+      mediaDir = 'documents';
+      break;
+    case 'audio':
+      mediaDir = 'audios';
+      break;
+    default:
+      return null;
+  }
+  
+  return path.join(__dirname, 'private', 'chats', chatId, mediaDir, message.content);
+}
+
+// Enhanced function to validate and clean messages before returning them
+async function validateAndCleanMessages(messages, chatId) {
+  let hasChanges = false;
+  const validatedMessages = [];
+  
+  for (const message of messages) {
+    // Check if message has a file attachment
+    if (['image', 'video', 'document', 'audio'].includes(message.type)) {
+      const filePath = getMessageFilePath(message, chatId);
+      
+      if (filePath && !(await fileExists(filePath))) {
+        // File doesn't exist, mark for removal
+        console.log(`Ghost message detected: ${message.id} - file ${message.content} not found in chat ${chatId}, removing from chat`);
+        hasChanges = true;
+        continue; // Skip this message
+      }
+    }
+    
+    // Message is valid, keep it
+    validatedMessages.push(message);
+  }
+  
+  // If we found ghost messages, save the cleaned messages back to file
+  if (hasChanges) {
+    const chatFile = path.join(__dirname, 'private', 'chats', chatId, `${chatId}.json`);
+    
+    try {
+      await fs.writeFile(chatFile, JSON.stringify(validatedMessages, null, 2));
+      console.log(`Cleaned ${messages.length - validatedMessages.length} ghost messages from chat ${chatId}`);
+      
+      // Update cache
+      messageCache.set(chatId, validatedMessages.slice());
+    } catch (error) {
+      console.error(`Error saving cleaned messages for chat ${chatId}:`, error);
+    }
+  }
+  
+  return validatedMessages;
+}
+
+// Enhanced function to load ALL messages for a chat with caching and ghost message prevention
 async function getMessagesForUsers(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
-  const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
+  
+  // Check cache first, but still validate for ghost messages periodically
+  const cachedMessages = messageCache.get(chatId);
+  
+  const chatFile = path.join(__dirname, 'private', 'chats', chatId, `${chatId}.json`);
   
   try {
     const data = await fs.readFile(chatFile, 'utf8');
     const messages = JSON.parse(data);
     
     // Sort by timestamp (oldest first for display)
-    return messages.sort((a, b) => a.timestamp - b.timestamp);
+    const sortedMessages = messages.sort((a, b) => a.timestamp - b.timestamp);
+    
+    // Validate and clean messages (removes ghost messages)
+    const validatedMessages = await validateAndCleanMessages(sortedMessages, chatId);
+    
+    // Update cache with validated messages
+    messageCache.set(chatId, validatedMessages.slice());
+    
+    return validatedMessages;
   } catch (error) {
     // Chat doesn't exist yet, return empty array
-    return [];
+    const emptyMessages = [];
+    messageCache.set(chatId, emptyMessages);
+    return emptyMessages;
   }
 }
 
@@ -250,29 +376,32 @@ async function cleanupOldMessages() {
   let filesDeleted = 0;
   
   try {
-    const chats = await loadJSON('private/messages/chats.json');
+    const chats = await loadJSON('private/chats.json');
     
     for (const chat of chats) {
-      const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chat.id, `${chat.id}.json`);
+      const chatFile = path.join(__dirname, 'private', 'chats', chat.id, `${chat.id}.json`);
       
       try {
         const data = await fs.readFile(chatFile, 'utf8');
         const messages = JSON.parse(data);
         const initialCount = messages.length;
         
+        // First validate messages for ghost files
+        const validatedMessages = await validateAndCleanMessages(messages, chat.id);
+        
         // Separate messages to keep and delete based on BOTH time and count
-        const messagesToDelete = messages.filter(msg => msg.timestamp < cutoffTime);
-        let messagesToKeep = messages.filter(msg => msg.timestamp >= cutoffTime);
+        const messagesToDelete = validatedMessages.filter(msg => msg.timestamp < cutoffTime);
+        let messagesToKeep = validatedMessages.filter(msg => msg.timestamp >= cutoffTime);
         
         // Delete associated media files for old messages
         for (const message of messagesToDelete) {
-          if (message.type === 'image' || message.type === 'video') {
+          if (['image', 'video', 'document', 'audio'].includes(message.type)) {
             try {
-              const filePath = message.type === 'image' 
-                ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-                : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-              await fs.unlink(filePath);
-              filesDeleted++;
+              const filePath = getMessageFilePath(message, chat.id);
+              if (filePath) {
+                await fs.unlink(filePath);
+                filesDeleted++;
+              }
             } catch (error) {
               // File might already be deleted or not exist
               console.log(`Could not delete media file ${message.content}: ${error.message}`);
@@ -289,15 +418,15 @@ async function cleanupOldMessages() {
           
           // Delete media files for excess messages too
           for (const message of excessMessages) {
-            if (message.type === 'image' || message.type === 'video') {
+            if (['image', 'video', 'document', 'audio'].includes(message.type)) {
               try {
-                const filePath = message.type === 'image' 
-                  ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-                  : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-                await fs.unlink(filePath);
-                filesDeleted++;
+                const filePath = getMessageFilePath(message, chat.id);
+                if (filePath) {
+                  await fs.unlink(filePath);
+                  filesDeleted++;
+                }
               } catch (error) {
-                console.log(`Could not delete excess media file ${message.content}: ${error.message}`);
+                console.log(`Could not delete excess media file ${message.content}:`, error.message);
               }
             }
           }
@@ -308,6 +437,9 @@ async function cleanupOldMessages() {
           await fs.writeFile(chatFile, JSON.stringify(messagesToKeep, null, 2));
           const deletedCount = initialCount - messagesToKeep.length;
           totalDeleted += deletedCount;
+          
+          // Update cache
+          messageCache.set(chat.id, messagesToKeep.slice());
           
           if (deletedCount > 0) {
             console.log(`Chat ${chat.id}: Deleted ${deletedCount} old messages (${initialCount} -> ${messagesToKeep.length})`);
@@ -332,57 +464,51 @@ async function cleanupOrphanedMediaFiles() {
   let orphanedFiles = 0;
   
   try {
-    const chats = await loadJSON('private/messages/chats.json');
-    const referencedFiles = new Set();
+    const chats = await loadJSON('private/chats.json');
     
-    // Collect all referenced media files from all chats
     for (const chat of chats) {
       try {
+        // Get all referenced files in this chat
         const messages = await getMessagesForUsers(chat.participants[0], chat.participants[1]);
+        const referencedFiles = new Set();
+        
         for (const message of messages) {
-          if (message.type === 'image' || message.type === 'video') {
+          if (['image', 'video', 'document', 'audio'].includes(message.type)) {
             referencedFiles.add(message.content);
           }
         }
+        
+        // Check each media directory in this chat
+        const chatDir = path.join(__dirname, 'private', 'chats', chat.id);
+        const mediaDirs = ['pictures', 'videos', 'documents', 'audios'];
+        
+        for (const mediaDir of mediaDirs) {
+          const mediaDirPath = path.join(chatDir, mediaDir);
+          
+          try {
+            const files = await fs.readdir(mediaDirPath);
+            for (const file of files) {
+              if (!referencedFiles.has(file)) {
+                try {
+                  await fs.unlink(path.join(mediaDirPath, file));
+                  orphanedFiles++;
+                  console.log(`Deleted orphaned ${mediaDir} file from chat ${chat.id}: ${file}`);
+                } catch (error) {
+                  console.error(`Error deleting orphaned ${mediaDir} file ${file} from chat ${chat.id}:`, error);
+                }
+              }
+            }
+          } catch (error) {
+            // Directory might not exist, which is fine
+            if (error.code !== 'ENOENT') {
+              console.error(`Error reading ${mediaDir} directory for chat ${chat.id}:`, error);
+            }
+          }
+        }
+        
       } catch (error) {
-        console.error(`Error checking chat ${chat.id} for media references:`, error);
+        console.error(`Error checking chat ${chat.id} for orphaned media:`, error);
       }
-    }
-    
-    // Check pictures directory
-    try {
-      const pictureFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'pictures'));
-      for (const file of pictureFiles) {
-        if (!referencedFiles.has(file)) {
-          try {
-            await fs.unlink(path.join(__dirname, 'private', 'messages', 'pictures', file));
-            orphanedFiles++;
-            console.log(`Deleted orphaned picture: ${file}`);
-          } catch (error) {
-            console.error(`Error deleting orphaned picture ${file}:`, error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error reading pictures directory:', error);
-    }
-    
-    // Check videos directory
-    try {
-      const videoFiles = await fs.readdir(path.join(__dirname, 'private', 'messages', 'videos'));
-      for (const file of videoFiles) {
-        if (!referencedFiles.has(file)) {
-          try {
-            await fs.unlink(path.join(__dirname, 'private', 'messages', 'videos', file));
-            orphanedFiles++;
-            console.log(`Deleted orphaned video: ${file}`);
-          } catch (error) {
-            console.error(`Error deleting orphaned video ${file}:`, error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error reading videos directory:', error);
     }
     
     console.log(`Orphaned media cleanup completed: ${orphanedFiles} files deleted`);
@@ -398,7 +524,7 @@ async function saveMessageToChat(user1Id, user2Id, message) {
   // Ensure chat exists
   await createChat(user1Id, user2Id);
   
-  // Load existing messages
+  // Load existing messages from cache or file (with validation)
   const messages = await getMessagesForUsers(user1Id, user2Id);
   
   // Add new message
@@ -415,13 +541,13 @@ async function saveMessageToChat(user1Id, user2Id, message) {
     
     // Delete associated files for excess messages
     for (const oldMessage of excessMessages) {
-      if (oldMessage.type === 'image' || oldMessage.type === 'video') {
+      if (['image', 'video', 'document', 'audio'].includes(oldMessage.type)) {
         try {
-          const filePath = oldMessage.type === 'image' 
-            ? path.join(__dirname, 'private', 'messages', 'pictures', oldMessage.content)
-            : path.join(__dirname, 'private', 'messages', 'videos', oldMessage.content);
-          await fs.unlink(filePath);
-          console.log(`Deleted excess message file: ${filePath}`);
+          const filePath = getMessageFilePath(oldMessage, chatId);
+          if (filePath) {
+            await fs.unlink(filePath);
+            console.log(`Deleted excess message file: ${filePath}`);
+          }
         } catch (error) {
           console.log(`Could not delete excess file ${oldMessage.content}:`, error.message);
         }
@@ -430,49 +556,37 @@ async function saveMessageToChat(user1Id, user2Id, message) {
   }
   
   // Save messages back to chat file
-  const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chatId, `${chatId}.json`);
+  const chatFile = path.join(__dirname, 'private', 'chats', chatId, `${chatId}.json`);
   await fs.writeFile(chatFile, JSON.stringify(finalMessages, null, 2));
   
+  // Update cache
+  messageCache.set(chatId, finalMessages.slice());
+  
   // Update last message time in chats.json
-  const chats = await loadJSON('private/messages/chats.json');
+  const chats = await loadJSON('private/chats.json');
   const chatIndex = chats.findIndex(chat => chat.id === chatId);
   if (chatIndex !== -1) {
     chats[chatIndex].lastMessage = Date.now();
-    await saveJSON('private/messages/chats.json', chats);
+    await saveJSON('private/chats.json', chats);
   }
 }
 
 async function deleteMessagesForUsers(user1Id, user2Id) {
   const chatId = generateChatId(user1Id, user2Id);
-  const chatDir = path.join(__dirname, 'private', 'messages', 'chats', chatId);
+  const chatDir = path.join(__dirname, 'private', 'chats', chatId);
   
   try {
-    // Get all messages first to delete associated files
-    const messages = await getMessagesForUsers(user1Id, user2Id);
+    // Clear cache first
+    messageCache.delete(chatId);
     
-    // Delete associated files (images/videos)
-    for (const message of messages) {
-      if (message.type === 'image' || message.type === 'video') {
-        try {
-          const filePath = message.type === 'image' 
-            ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-            : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-          await fs.unlink(filePath);
-          console.log(`Deleted file: ${filePath}`);
-        } catch (error) {
-          console.log(`Could not delete file ${message.content}:`, error.message);
-        }
-      }
-    }
-    
-    // Delete the entire chat directory
+    // Delete the entire chat directory (includes all files and subdirectories)
     await fs.rmdir(chatDir, { recursive: true });
     console.log(`Deleted chat directory: ${chatDir}`);
     
     // Remove chat from chats.json
-    const chats = await loadJSON('private/messages/chats.json');
+    const chats = await loadJSON('private/chats.json');
     const filteredChats = chats.filter(chat => chat.id !== chatId);
-    await saveJSON('private/messages/chats.json', filteredChats);
+    await saveJSON('private/chats.json', filteredChats);
     
   } catch (error) {
     console.error(`Error deleting chat ${chatId}:`, error);
@@ -480,27 +594,28 @@ async function deleteMessagesForUsers(user1Id, user2Id) {
 }
 
 async function deleteMessageById(messageId) {
-  const chats = await loadJSON('private/messages/chats.json');
+  const chats = await loadJSON('private/chats.json');
   
   // Search through all chats to find the message
   for (const chat of chats) {
-    const chatFile = path.join(__dirname, 'private', 'messages', 'chats', chat.id, `${chat.id}.json`);
+    const chatFile = path.join(__dirname, 'private', 'chats', chat.id, `${chat.id}.json`);
     
     try {
-      const messages = JSON.parse(await fs.readFile(chatFile, 'utf8'));
+      // Get messages from cache or file (with validation)
+      const messages = await getMessagesForUsers(chat.participants[0], chat.participants[1]);
       const messageIndex = messages.findIndex(msg => msg.id === messageId);
       
       if (messageIndex !== -1) {
         const message = messages[messageIndex];
         
-        // Delete file if it's an image or video
-        if (message.type === 'image' || message.type === 'video') {
+        // Delete file if it's an image, video, document, or audio
+        if (['image', 'video', 'document', 'audio'].includes(message.type)) {
           try {
-            const filePath = message.type === 'image' 
-              ? path.join(__dirname, 'private', 'messages', 'pictures', message.content)
-              : path.join(__dirname, 'private', 'messages', 'videos', message.content);
-            await fs.unlink(filePath);
-            console.log(`Deleted file: ${filePath}`);
+            const filePath = getMessageFilePath(message, chat.id);
+            if (filePath) {
+              await fs.unlink(filePath);
+              console.log(`Deleted file: ${filePath}`);
+            }
           } catch (error) {
             console.error(`Error deleting file ${message.content}:`, error);
           }
@@ -509,6 +624,9 @@ async function deleteMessageById(messageId) {
         // Remove message from array
         messages.splice(messageIndex, 1);
         await fs.writeFile(chatFile, JSON.stringify(messages, null, 2));
+        
+        // Update cache
+        messageCache.set(chat.id, messages.slice());
         
         return { success: true, message };
       }
@@ -674,7 +792,7 @@ async function unbanUser(userId) {
 async function sendUpdatedUserLists(socket, userId) {
   try {
     const friends = await loadJSON('private/friends/friends.json');
-    const chats = await loadJSON('private/messages/chats.json');
+    const chats = await loadJSON('private/chats.json');
     
     // Update friends list
     const userFriends = friends.filter(f => 
@@ -862,6 +980,53 @@ function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
   return { allowed: true };
 }
 
+function checkDocumentLimit(userId) {
+  const now = Date.now();
+  if (!documentLimits.has(userId)) {
+    documentLimits.set(userId, { uploads: [], dailyUploads: [] });
+  }
+  
+  const userLimits = documentLimits.get(userId);
+  
+  // Clean old uploads (5 minutes between document uploads)
+  userLimits.uploads = userLimits.uploads.filter(time => now - time < DOCUMENT_UPLOAD_COOLDOWN);
+  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
+  
+  // Check daily limit (10 per day)
+  if (userLimits.dailyUploads.length >= DAILY_DOCUMENT_LIMIT) {
+    return { allowed: false, reason: 'Daily document limit reached (10 documents per day)' };
+  }
+  
+  // Check 5-minute cooldown
+  if (userLimits.uploads.length >= 1) {
+    return { allowed: false, reason: 'Please wait 5 minutes between document uploads' };
+  }
+  
+  userLimits.uploads.push(now);
+  userLimits.dailyUploads.push(now);
+  return { allowed: true };
+}
+
+function checkVoiceLimit(userId) {
+  const now = Date.now();
+  if (!voiceLimits.has(userId)) {
+    voiceLimits.set(userId, { dailyUploads: [] });
+  }
+  
+  const userLimits = voiceLimits.get(userId);
+  
+  // Clean old uploads
+  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
+  
+  // Check daily limit (10 per day)
+  if (userLimits.dailyUploads.length >= DAILY_VOICE_LIMIT) {
+    return { allowed: false, reason: 'Daily voice message limit reached (10 voice messages per day)' };
+  }
+  
+  userLimits.dailyUploads.push(now);
+  return { allowed: true };
+}
+
 function checkFriendRequestCooldown(userId) {
   const now = Date.now();
   if (friendRequestCooldowns.has(userId)) {
@@ -932,7 +1097,7 @@ io.on('connection', (socket) => {
       
       // Load and send friends list with full user details - SORTED BY LAST MESSAGE
       const friends = await loadJSON('private/friends/friends.json');
-      const chats = await loadJSON('private/messages/chats.json');
+      const chats = await loadJSON('private/chats.json');
       const userFriends = friends.filter(f => 
         (f.user1 === user.id || f.user2 === user.id) && f.status === 'accepted'
       );
@@ -1007,12 +1172,14 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Simplified load_messages - loads ALL messages (max 250)
+  // Enhanced load_messages - loads ALL messages (max 250) with ghost message prevention
   socket.on('load_messages', async (data) => {
     try {
       if (!socket.userId) return;
       
       const { friendId } = data;
+      
+      // Get validated messages (this will automatically clean up ghost messages)
       const messages = await getMessagesForUsers(socket.userId, friendId);
       
       socket.emit('messages_loaded', { friendId, messages });
@@ -1036,7 +1203,7 @@ io.on('connection', (socket) => {
       }
       
       // Find the message first to check permissions
-      const chats = await loadJSON('private/messages/chats.json');
+      const chats = await loadJSON('private/chats.json');
       let foundMessage = null;
       let messageSender = null;
       
@@ -1622,7 +1789,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Fixed upload endpoint that validates BEFORE saving files
+// Enhanced upload endpoint that handles documents and voice messages with new structure
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   let savedFilePath = null;
   
@@ -1638,7 +1805,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const userId = req.body.userId;
     const receiverId = req.body.receiverId;
     
-    // Check user tier
+    // Check user exists
     const users = await loadJSON('private/users/users.json');
     const user = users.find(u => u.id === userId);
     
@@ -1648,10 +1815,18 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     const userTier = getUserTier(user);
     const isVideo = req.file.mimetype.startsWith('video/');
+    const isImage = req.file.mimetype.startsWith('image/');
+    const isDocument = req.file.mimetype === 'text/plain';
+    const isAudio = req.file.mimetype === 'audio/webm'; // Only WebM audio
     
-    // Owner bypasses all tier restrictions
+    // Check if user is muted
+    if (await isUserMuted(userId)) {
+      return res.status(403).json({ error: 'You are currently muted' });
+    }
+    
+    // Tier restrictions only apply to images and videos
     if (user.role !== 'owner') {
-      if (userTier < 2) {
+      if ((isImage || isVideo) && userTier < 2) {
         return res.status(403).json({ error: 'Insufficient tier for file uploads (Need Tier 2+)' });
       }
       
@@ -1660,13 +1835,34 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       }
     }
     
-    // Check if user is muted
-    if (await isUserMuted(userId)) {
-      return res.status(403).json({ error: 'You are currently muted' });
+    // File size checks
+    if (isDocument && req.file.size > MAX_DOCUMENT_SIZE) {
+      return res.status(413).json({ error: `Document too large (${Math.round(req.file.size/1024)}KB / 50KB max)` });
     }
     
-    // Check upload limits (owners bypass this)
-    const limitCheck = checkUploadLimit(userId, isVideo, user.role);
+    if (isAudio && req.file.size > MAX_VOICE_SIZE) {
+      return res.status(413).json({ error: `Voice message too large (${Math.round(req.file.size/(1024*1024))}MB / 2MB max)` });
+    }
+    
+    // Audio file validation (WebM only)
+    if (isAudio) {
+      if (!validateWebM(req.file.buffer)) {
+        return res.status(400).json({ error: 'Invalid WebM audio file or corrupted audio file' });
+      }
+    }
+    
+    // Check upload limits
+    let limitCheck;
+    
+    if (isDocument) {
+      limitCheck = checkDocumentLimit(userId);
+    } else if (isAudio) {
+      limitCheck = checkVoiceLimit(userId);
+    } else {
+      // Images and videos use the existing upload limit system
+      limitCheck = checkUploadLimit(userId, isVideo, user.role);
+    }
+    
     if (!limitCheck.allowed) {
       return res.status(429).json({ error: limitCheck.reason });
     }
@@ -1683,11 +1879,35 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(403).json({ error: 'Can only send files to friends' });
     }
     
-    // All validations passed, now save the file to disk
+    // All validations passed, now save the file to the chat's directory
+    const chatId = generateChatId(userId, receiverId);
+    
+    // Ensure chat exists with proper directory structure
+    await createChat(userId, receiverId);
+    
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = uniqueSuffix + path.extname(req.file.originalname);
-    const dir = isVideo ? 'private/messages/videos/' : 'private/messages/pictures/';
-    savedFilePath = path.join(__dirname, dir, filename);
+    let filename, mediaDir, messageType;
+    
+    if (isVideo) {
+      filename = uniqueSuffix + path.extname(req.file.originalname);
+      mediaDir = 'videos';
+      messageType = 'video';
+    } else if (isImage) {
+      filename = uniqueSuffix + path.extname(req.file.originalname);
+      mediaDir = 'pictures';
+      messageType = 'image';
+    } else if (isDocument) {
+      filename = uniqueSuffix + '.txt';
+      mediaDir = 'documents';
+      messageType = 'document';
+    } else if (isAudio) {
+      filename = uniqueSuffix + '.webm';
+      mediaDir = 'audios';
+      messageType = 'audio';
+    }
+    
+    // Create the full path to save the file in the chat's media directory
+    savedFilePath = path.join(__dirname, 'private', 'chats', chatId, mediaDir, filename);
     
     await fs.writeFile(savedFilePath, req.file.buffer);
     
@@ -1697,7 +1917,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       senderId: userId,
       receiverId,
       content: filename,
-      type: isVideo ? 'video' : 'image',
+      type: messageType,
       timestamp: Date.now()
     };
     
@@ -1735,24 +1955,40 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// Serve media files
+// Enhanced media serving endpoint that searches through chat directories
 app.get('/api/media/:filename', async (req, res) => {
   const filename = req.params.filename;
-  const imagePath = path.join(__dirname, 'private', 'messages', 'pictures', filename);
-  const videoPath = path.join(__dirname, 'private', 'messages', 'videos', filename);
   
   try {
-    // Try image path first
-    await fs.access(imagePath);
-    res.sendFile(imagePath);
-  } catch {
-    try {
-      // Then try video path
-      await fs.access(videoPath);
-      res.sendFile(videoPath);
-    } catch {
-      res.status(404).send('File not found');
+    // Get all chat directories
+    const chatsDir = path.join(__dirname, 'private', 'chats');
+    const chatIds = await fs.readdir(chatsDir);
+    
+    // Search through all chat directories for the file
+    const mediaTypes = ['pictures', 'videos', 'documents', 'audios'];
+    
+    for (const chatId of chatIds) {
+      for (const mediaType of mediaTypes) {
+        const filePath = path.join(chatsDir, chatId, mediaType, filename);
+        
+        try {
+          await fs.access(filePath);
+          // File found, serve it
+          res.sendFile(filePath);
+          return;
+        } catch {
+          // File not found in this location, continue searching
+          continue;
+        }
+      }
     }
+    
+    // File not found anywhere
+    res.status(404).send('File not found');
+    
+  } catch (error) {
+    console.error('Error serving media file:', error);
+    res.status(500).send('Server error');
   }
 });
 
@@ -2162,6 +2398,14 @@ async function start() {
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
     console.log(`Message retention: 48 hours`);
     console.log(`Max messages per chat: ${MAX_MESSAGES_PER_CHAT}`);
+    console.log(`Document upload cooldown: 5 minutes`);
+    console.log(`Max document size: 50KB`);
+    console.log(`Max voice message size: 2MB`);
+    console.log(`Daily document limit: ${DAILY_DOCUMENT_LIMIT}`);
+    console.log(`Daily voice message limit: ${DAILY_VOICE_LIMIT}`);
+    console.log(`Audio format: WebM only`);
+    console.log(`Ghost message prevention: ENABLED`);
+    console.log(`File structure: Chat-centric organization`);
   });
 }
 

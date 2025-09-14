@@ -16,6 +16,19 @@ const PulseChat = {
     // Message input focus detection for notifications
     isMessageInputFocused: false,
     
+    // Voice recording state
+    voiceRecording: {
+        mediaRecorder: null,
+        audioChunks: [],
+        isRecording: false,
+        recordedBlob: null,
+        startTime: null,
+        timerInterval: null
+    },
+    
+    // Upload menu state
+    uploadMenuOpen: false,
+    
     // Connection state tracking
     connectionState: {
         wasBackgrounded: false,
@@ -27,6 +40,25 @@ const PulseChat = {
     elements: {
         // Audio elements
         notificationSound: null, // Will be created dynamically
+        
+        // Voice Recording Modal
+        voiceRecordingModal: document.getElementById('voiceRecordingModal'),
+        recordingIcon: document.getElementById('recordingIcon'),
+        recordingStatus: document.getElementById('recordingStatus'),
+        recordingTimer: document.getElementById('recordingTimer'),
+        recordBtn: document.getElementById('recordBtn'),
+        playbackBtn: document.getElementById('playbackBtn'),
+        sendVoiceBtn: document.getElementById('sendVoiceBtn'),
+        
+        // Upload Menu
+        uploadToggleBtn: document.getElementById('uploadToggleBtn'),
+        uploadMenu: document.getElementById('uploadMenu'),
+        imageVideoInput: document.getElementById('imageVideoInput'),
+        documentInput: document.getElementById('documentInput'),
+        
+        // Character Counter
+        charCount: document.getElementById('charCount'),
+        maxChars: document.getElementById('maxChars'),
         
         // Mobile Navigation
         mobileNavOverlay: document.getElementById('mobileNavOverlay'),
@@ -73,8 +105,6 @@ const PulseChat = {
         messagesContainer: document.getElementById('messagesContainer'),
         messageInput: document.getElementById('messageInput'),
         sendBtn: document.getElementById('sendBtn'),
-        uploadBtn: document.getElementById('uploadBtn'),
-        fileInput: document.getElementById('fileInput'),
         
         // User Info
         currentUsername: document.getElementById('currentUsername'),
@@ -128,6 +158,518 @@ const PulseChat = {
     }
 };
 
+// ===== Voice Recording Functions =====
+
+async function initializeVoiceRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        PulseChat.voiceRecording.mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+        });
+        
+        PulseChat.voiceRecording.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                PulseChat.voiceRecording.audioChunks.push(event.data);
+            }
+        };
+        
+        PulseChat.voiceRecording.mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(PulseChat.voiceRecording.audioChunks, { type: 'audio/webm' });
+            PulseChat.voiceRecording.recordedBlob = audioBlob;
+            PulseChat.elements.playbackBtn.disabled = false;
+            PulseChat.elements.sendVoiceBtn.disabled = false;
+        };
+        
+        return true;
+    } catch (error) {
+        console.error('Failed to initialize voice recording:', error);
+        showNotification('Microphone access denied or unavailable', 'error');
+        return false;
+    }
+}
+
+function startVoiceRecording() {
+    if (!PulseChat.selectedFriend) {
+        showNotification('Please select a friend first', 'error');
+        return;
+    }
+    
+    showModal(PulseChat.elements.voiceRecordingModal);
+    initializeVoiceRecording();
+}
+
+function toggleRecording() {
+    if (PulseChat.voiceRecording.isRecording) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+async function startRecording() {
+    try {
+        if (!PulseChat.voiceRecording.mediaRecorder) {
+            const success = await initializeVoiceRecording();
+            if (!success) return;
+        }
+        
+        // Reset recording state
+        PulseChat.voiceRecording.audioChunks = [];
+        PulseChat.voiceRecording.recordedBlob = null;
+        PulseChat.voiceRecording.isRecording = true;
+        PulseChat.voiceRecording.startTime = Date.now();
+        
+        // Update UI
+        PulseChat.elements.recordingIcon.classList.add('recording');
+        PulseChat.elements.recordingTimer.classList.add('recording');
+        PulseChat.elements.recordingStatus.textContent = 'Recording...';
+        PulseChat.elements.recordBtn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12"></rect>
+            </svg>
+            Stop Recording
+        `;
+        PulseChat.elements.recordBtn.classList.add('recording');
+        PulseChat.elements.playbackBtn.disabled = true;
+        PulseChat.elements.sendVoiceBtn.disabled = true;
+        
+        // Start timer
+        PulseChat.voiceRecording.timerInterval = setInterval(updateRecordingTimer, 100);
+        
+        // Start recording
+        PulseChat.voiceRecording.mediaRecorder.start();
+        
+        // Auto-stop after 60 seconds
+        setTimeout(() => {
+            if (PulseChat.voiceRecording.isRecording) {
+                stopRecording();
+                showNotification('Recording stopped - 1 minute limit reached', 'warning');
+            }
+        }, 60000);
+        
+    } catch (error) {
+        console.error('Failed to start recording:', error);
+        showNotification('Failed to start recording', 'error');
+    }
+}
+
+function stopRecording() {
+    if (!PulseChat.voiceRecording.isRecording) return;
+    
+    PulseChat.voiceRecording.isRecording = false;
+    
+    // Stop timer
+    if (PulseChat.voiceRecording.timerInterval) {
+        clearInterval(PulseChat.voiceRecording.timerInterval);
+        PulseChat.voiceRecording.timerInterval = null;
+    }
+    
+    // Update UI
+    PulseChat.elements.recordingIcon.classList.remove('recording');
+    PulseChat.elements.recordingTimer.classList.remove('recording');
+    PulseChat.elements.recordingStatus.textContent = 'Recording complete';
+    PulseChat.elements.recordBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+        </svg>
+        Start Recording
+    `;
+    PulseChat.elements.recordBtn.classList.remove('recording');
+    
+    // Stop recording
+    if (PulseChat.voiceRecording.mediaRecorder && PulseChat.voiceRecording.mediaRecorder.state === 'recording') {
+        PulseChat.voiceRecording.mediaRecorder.stop();
+    }
+}
+
+function updateRecordingTimer() {
+    if (!PulseChat.voiceRecording.startTime) return;
+    
+    const elapsed = Date.now() - PulseChat.voiceRecording.startTime;
+    const seconds = Math.floor(elapsed / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    const timeString = `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    PulseChat.elements.recordingTimer.textContent = timeString;
+}
+
+function playRecording() {
+    if (!PulseChat.voiceRecording.recordedBlob) return;
+    
+    const audioUrl = URL.createObjectURL(PulseChat.voiceRecording.recordedBlob);
+    const audio = new Audio(audioUrl);
+    
+    audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+    };
+    
+    audio.play().catch(error => {
+        console.error('Failed to play recording:', error);
+        showNotification('Failed to play recording', 'error');
+    });
+}
+
+async function sendVoiceMessage() {
+    if (!PulseChat.voiceRecording.recordedBlob || !PulseChat.selectedFriend) return;
+    
+    try {
+        // Convert webm to mp3 (in a real app, you'd use a proper audio conversion library)
+        // For now, we'll send the webm and let the server handle conversion or validation
+        const formData = new FormData();
+        formData.append('file', PulseChat.voiceRecording.recordedBlob, 'voice_message.webm');
+        formData.append('userId', PulseChat.currentUser.id);
+        formData.append('receiverId', PulseChat.selectedFriend.friendId);
+        
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            showNotification(result.error, 'error');
+        } else {
+            showNotification('Voice message sent!', 'success');
+            cancelVoiceRecording();
+        }
+        
+    } catch (error) {
+        console.error('Failed to send voice message:', error);
+        showNotification('Failed to send voice message', 'error');
+    }
+}
+
+function cancelVoiceRecording() {
+    // Stop recording if active
+    if (PulseChat.voiceRecording.isRecording) {
+        stopRecording();
+    }
+    
+    // Stop timer
+    if (PulseChat.voiceRecording.timerInterval) {
+        clearInterval(PulseChat.voiceRecording.timerInterval);
+        PulseChat.voiceRecording.timerInterval = null;
+    }
+    
+    // Close microphone stream
+    if (PulseChat.voiceRecording.mediaRecorder && PulseChat.voiceRecording.mediaRecorder.stream) {
+        PulseChat.voiceRecording.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+    
+    // Reset state
+    PulseChat.voiceRecording = {
+        mediaRecorder: null,
+        audioChunks: [],
+        isRecording: false,
+        recordedBlob: null,
+        startTime: null,
+        timerInterval: null
+    };
+    
+    // Reset UI
+    PulseChat.elements.recordingIcon.classList.remove('recording');
+    PulseChat.elements.recordingTimer.classList.remove('recording');
+    PulseChat.elements.recordingStatus.textContent = 'Click to start recording';
+    PulseChat.elements.recordingTimer.textContent = '00:00';
+    PulseChat.elements.recordBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+        </svg>
+        Start Recording
+    `;
+    PulseChat.elements.recordBtn.classList.remove('recording');
+    PulseChat.elements.playbackBtn.disabled = true;
+    PulseChat.elements.sendVoiceBtn.disabled = true;
+    
+    hideModal(PulseChat.elements.voiceRecordingModal);
+}
+
+// ===== Upload Menu Functions =====
+
+function toggleUploadMenu() {
+    PulseChat.uploadMenuOpen = !PulseChat.uploadMenuOpen;
+    
+    if (PulseChat.uploadMenuOpen) {
+        PulseChat.elements.uploadMenu.classList.remove('hidden');
+        // Close on outside click
+        setTimeout(() => {
+            document.addEventListener('click', closeUploadMenuOutside);
+        }, 0);
+    } else {
+        PulseChat.elements.uploadMenu.classList.add('hidden');
+        document.removeEventListener('click', closeUploadMenuOutside);
+    }
+}
+
+function closeUploadMenuOutside(event) {
+    if (!event.target.closest('.upload-dropdown')) {
+        PulseChat.elements.uploadMenu.classList.add('hidden');
+        PulseChat.uploadMenuOpen = false;
+        document.removeEventListener('click', closeUploadMenuOutside);
+    }
+}
+
+function triggerImageUpload() {
+    PulseChat.elements.imageVideoInput.click();
+    PulseChat.elements.uploadMenu.classList.add('hidden');
+    PulseChat.uploadMenuOpen = false;
+}
+
+function triggerDocumentUpload() {
+    PulseChat.elements.documentInput.click();
+    PulseChat.elements.uploadMenu.classList.add('hidden');
+    PulseChat.uploadMenuOpen = false;
+}
+
+// ===== Upload Functions =====
+
+async function uploadImageVideo() {
+    if (!PulseChat.selectedFriend) return;
+    
+    const fileInput = PulseChat.elements.imageVideoInput;
+    const file = fileInput.files[0];
+    
+    if (!file) return;
+    
+    // Check file type
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    
+    if (!isImage && !isVideo) {
+        showNotification('Please select an image or video file', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    // Additional file validation for security
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxFileSize) {
+        showNotification('File is too large. Maximum size is 10MB.', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    const userTier = PulseChat.currentUser.tier || 1;
+    const userRole = PulseChat.currentUser.role || 'user';
+    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+    
+    if (isVideo && userTier < 3 && !hasSpecialRole) {
+        showNotification('You need Tier 3 to upload videos', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    if (isImage && userTier < 2 && !hasSpecialRole) {
+        showNotification('You need Tier 2 to upload images', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    await uploadFile(file);
+    fileInput.value = '';
+}
+
+async function uploadDocument() {
+    if (!PulseChat.selectedFriend) return;
+    
+    const fileInput = PulseChat.elements.documentInput;
+    const file = fileInput.files[0];
+    
+    if (!file) return;
+    
+    // Check file type
+    if (!file.type === 'text/plain' && !file.name.endsWith('.txt')) {
+        showNotification('Only .txt files are allowed', 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    // Check file size (50KB limit)
+    const maxFileSize = 50 * 1024; // 50KB
+    if (file.size > maxFileSize) {
+        showNotification(`Document too large (${Math.round(file.size/1024)}KB / 50KB max)`, 'error');
+        fileInput.value = '';
+        return;
+    }
+    
+    await uploadFile(file);
+    fileInput.value = '';
+}
+
+async function uploadFile(file) {
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('userId', PulseChat.currentUser.id);
+        formData.append('receiverId', PulseChat.selectedFriend.friendId);
+        
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            showNotification(result.error, 'error');
+        } else {
+            showNotification('File uploaded successfully!', 'success');
+        }
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        showNotification('Upload failed', 'error');
+    }
+}
+
+// ===== Audio Playback Functions =====
+
+function createAudioPlayer(audioUrl, messageElement) {
+    const audioPlayer = new Audio(audioUrl);
+    const playButton = messageElement.querySelector('.audio-play-btn');
+    const progressBar = messageElement.querySelector('.audio-progress');
+    const durationSpan = messageElement.querySelector('.audio-duration');
+    
+    let isPlaying = false;
+    
+    audioPlayer.addEventListener('loadedmetadata', () => {
+        const duration = audioPlayer.duration;
+        
+        // Check if duration is valid
+        if (!isFinite(duration) || isNaN(duration) || duration <= 0) {
+            durationSpan.textContent = '--:--';
+            return;
+        }
+        
+        const durationSeconds = Math.floor(duration);
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        durationSpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    });
+    
+    audioPlayer.addEventListener('timeupdate', () => {
+        const duration = audioPlayer.duration;
+        const currentTime = audioPlayer.currentTime;
+        
+        // Check if duration and currentTime are valid
+        if (!isFinite(duration) || isNaN(duration) || duration <= 0 ||
+            !isFinite(currentTime) || isNaN(currentTime)) {
+            return;
+        }
+        
+        const progress = (currentTime / duration) * 100;
+        progressBar.style.width = progress + '%';
+        
+        const remaining = Math.floor(duration - currentTime);
+        if (!isFinite(remaining) || isNaN(remaining) || remaining < 0) {
+            durationSpan.textContent = '--:--';
+            return;
+        }
+        
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        durationSpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    });
+    
+    audioPlayer.addEventListener('ended', () => {
+        isPlaying = false;
+        playButton.classList.remove('playing');
+        playButton.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5,3 19,12 5,21"></polygon>
+            </svg>
+        `;
+        progressBar.style.width = '0%';
+        
+        const duration = audioPlayer.duration;
+        
+        // Check if duration is valid before displaying
+        if (!isFinite(duration) || isNaN(duration) || duration <= 0) {
+            durationSpan.textContent = '--:--';
+            return;
+        }
+        
+        const durationSeconds = Math.floor(duration);
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        durationSpan.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    });
+    
+    playButton.addEventListener('click', () => {
+        if (isPlaying) {
+            audioPlayer.pause();
+            isPlaying = false;
+            playButton.classList.remove('playing');
+            playButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5,3 19,12 5,21"></polygon>
+                </svg>
+            `;
+        } else {
+            // Stop any other playing audio
+            document.querySelectorAll('.audio-play-btn.playing').forEach(btn => {
+                btn.click();
+            });
+            
+            audioPlayer.play();
+            isPlaying = true;
+            playButton.classList.add('playing');
+            playButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+            `;
+        }
+    });
+}
+
+// ===== Document Download Functions =====
+
+function downloadDocument(filename) {
+    // Validate filename for security
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        showNotification('Invalid file', 'error');
+        return;
+    }
+    
+    const downloadUrl = `/api/media/${encodeURIComponent(filename)}`;
+    
+    // Create temporary download link
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = filename;
+    a.style.display = 'none';
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ===== Character Counter Functions =====
+
+function updateCharacterCounter() {
+    const input = PulseChat.elements.messageInput;
+    const charCount = PulseChat.elements.charCount;
+    const counter = document.querySelector('.character-counter');
+    
+    const currentLength = input.value.length;
+    const maxLength = 250;
+    
+    charCount.textContent = currentLength;
+    
+    // Update counter styling based on character count
+    counter.classList.remove('warning', 'danger');
+    
+    if (currentLength >= maxLength * 0.9) {
+        counter.classList.add('danger');
+    } else if (currentLength >= maxLength * 0.75) {
+        counter.classList.add('warning');
+    }
+}
+
 // ===== Message Input Focus Detection =====
 
 function setupMessageInputFocusDetection() {
@@ -141,6 +683,8 @@ function setupMessageInputFocusDetection() {
         messageInput.addEventListener('blur', function() {
             PulseChat.isMessageInputFocused = false;
         });
+        
+        messageInput.addEventListener('input', updateCharacterCounter);
     }
 }
 
@@ -796,18 +1340,24 @@ const TIER_BENEFITS = {
     1: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
+        { text: 'Document sharing', available: true },
+        { text: 'Voice messages', available: true },
         { text: 'Image uploads', available: false },
         { text: 'Video uploads', available: false }
     ],
     2: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
+        { text: 'Document sharing', available: true },
+        { text: 'Voice messages', available: true },
         { text: 'Image uploads', available: true },
         { text: 'Video uploads', available: false }
     ],
     3: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
+        { text: 'Document sharing', available: true },
+        { text: 'Voice messages', available: true },
         { text: 'Image uploads', available: true },
         { text: 'Video uploads', available: true }
     ]
@@ -1477,7 +2027,7 @@ function selectFriend(friend) {
     // Enable inputs
     PulseChat.elements.messageInput.disabled = false;
     PulseChat.elements.sendBtn.disabled = false;
-    PulseChat.elements.uploadBtn.disabled = false;
+    PulseChat.elements.uploadToggleBtn.disabled = false;
     
     // Update user info panels (both desktop and mobile)
     updateUserInfoPanel(friend);
@@ -1541,6 +2091,7 @@ function sendMessage() {
     
     input.value = '';
     input.style.height = 'auto';
+    updateCharacterCounter();
 }
 
 function renderMessages() {
@@ -1652,6 +2203,87 @@ function addMessageToChat(message, scroll = true) {
             '{{MEDIA_URL}}': mediaUrl,
             '{{MESSAGE_ID}}': message.id
         });
+    } else if (message.type === 'document') {
+        // Validate media URL for security
+        const mediaUrl = `/api/media/${message.content}`;
+        if (!isValidMediaUrl(mediaUrl)) {
+            console.error('Invalid media URL detected');
+            return;
+        }
+        
+        // Get file size if available (you'd need to add this to the message object on server)
+        const fileSize = message.fileSize ? formatFileSize(message.fileSize) : 'Unknown size';
+        
+        setSafeHTML(messageDiv, `
+            <div class="message-header">{{SENDER_NAME}} • {{TIMESTAMP}}</div>
+            <div class="message-content">
+                <div class="document-message">
+                    <div class="document-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14,2H6a2,2,0,0,0-2,2V20a2,2,0,0,0,2,2H18a2,2,0,0,0,2-2V8Z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10,9 9,9 8,9"></polyline>
+                        </svg>
+                    </div>
+                    <div class="document-info">
+                        <div class="document-name">{{FILENAME}}</div>
+                        <div class="document-size">{{FILE_SIZE}}</div>
+                    </div>
+                    <button class="document-download" onclick="downloadDocument('{{FILENAME}}')" title="Download document">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7,10 12,15 17,10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            ${actionsHtml}
+        `, {
+            '{{SENDER_NAME}}': senderName,
+            '{{TIMESTAMP}}': timestamp,
+            '{{FILENAME}}': message.content,
+            '{{FILE_SIZE}}': fileSize,
+            '{{MESSAGE_ID}}': message.id
+        });
+    } else if (message.type === 'audio') {
+        // Validate media URL for security
+        const mediaUrl = `/api/media/${message.content}`;
+        if (!isValidMediaUrl(mediaUrl)) {
+            console.error('Invalid media URL detected');
+            return;
+        }
+        
+        setSafeHTML(messageDiv, `
+            <div class="message-header">{{SENDER_NAME}} • {{TIMESTAMP}}</div>
+            <div class="message-content">
+                <div class="audio-message">
+                    <div class="audio-controls">
+                        <button class="audio-play-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5,3 19,12 5,21"></polygon>
+                            </svg>
+                        </button>
+                        <div class="audio-waveform">
+                            <div class="audio-progress"></div>
+                        </div>
+                        <span class="audio-duration">--:--</span>
+                    </div>
+                </div>
+            </div>
+            ${actionsHtml}
+        `, {
+            '{{SENDER_NAME}}': senderName,
+            '{{TIMESTAMP}}': timestamp,
+            '{{MESSAGE_ID}}': message.id
+        });
+        
+        // Initialize audio player after DOM is ready
+        setTimeout(() => {
+            createAudioPlayer(mediaUrl, messageDiv);
+        }, 0);
     }
     
     container.appendChild(messageDiv);
@@ -1659,6 +2291,14 @@ function addMessageToChat(message, scroll = true) {
     if (scroll) {
         container.scrollTop = container.scrollHeight;
     }
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function deleteMessage(messageId) {
@@ -1670,77 +2310,10 @@ function deleteMessage(messageId) {
     PulseChat.socket.emit('delete_message', { messageId: sanitizedMessageId });
 }
 
-function uploadFile() {
-    if (!PulseChat.selectedFriend) return;
-    
-    const fileInput = PulseChat.elements.fileInput;
-    const file = fileInput.files[0];
-    
-    if (!file) return;
-    
-    // Check file type based on user tier
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
-    
-    if (!isImage && !isVideo) {
-        showNotification('Please select an image or video file', 'error');
-        fileInput.value = '';
-        return;
-    }
-    
-    // Additional file validation for security
-    const maxFileSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxFileSize) {
-        showNotification('File is too large. Maximum size is 50MB.', 'error');
-        fileInput.value = '';
-        return;
-    }
-    
-    const userTier = PulseChat.currentUser.tier || 1;
-    const userRole = PulseChat.currentUser.role || 'user';
-    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
-    
-    if (isVideo && userTier < 3 && !hasSpecialRole) {
-        showNotification('You need Tier 3 to upload videos', 'error');
-        fileInput.value = '';
-        return;
-    }
-    
-    if (isImage && userTier < 2 && !hasSpecialRole) {
-        showNotification('You need Tier 2 to upload images', 'error');
-        fileInput.value = '';
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', PulseChat.currentUser.id);
-    formData.append('receiverId', PulseChat.selectedFriend.friendId);
-    
-    fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            showNotification(data.error, 'error');
-        } else {
-            showNotification('File uploaded successfully!', 'success');
-        }
-        // Always clear the input after upload attempt
-        fileInput.value = '';
-    })
-    .catch(err => {
-        showNotification('Upload failed', 'error');
-        fileInput.value = '';
-    });
-}
-
 function disableInputs() {
     PulseChat.elements.messageInput.disabled = true;
     PulseChat.elements.sendBtn.disabled = true;
-    PulseChat.elements.uploadBtn.disabled = true;
+    PulseChat.elements.uploadToggleBtn.disabled = true;
 }
 
 // ===== User Actions =====
@@ -1909,6 +2482,8 @@ document.addEventListener('click', function(e) {
             closeBanModal();
         } else if (modal.id === 'mobileUserInfoModal') {
             closeMobileUserInfo();
+        } else if (modal.id === 'voiceRecordingModal') {
+            cancelVoiceRecording();
         }
     }
 });
@@ -1951,7 +2526,6 @@ window.respondToFriendRequest = respondToFriendRequest;
 window.unblockUser = unblockUser;
 window.sendMessage = sendMessage;
 window.deleteMessage = deleteMessage;
-window.uploadFile = uploadFile;
 window.blockUser = blockUser;
 window.muteUser = muteUser;
 window.showBanModal = showBanModal;
@@ -1963,3 +2537,18 @@ window.saveSettings = saveSettings;
 window.showMobileUserInfo = showMobileUserInfo;
 window.closeMobileUserInfo = closeMobileUserInfo;
 window.switchSettingsTab = switchSettingsTab;
+
+// Voice recording functions
+window.startVoiceRecording = startVoiceRecording;
+window.toggleRecording = toggleRecording;
+window.playRecording = playRecording;
+window.sendVoiceMessage = sendVoiceMessage;
+window.cancelVoiceRecording = cancelVoiceRecording;
+
+// Upload functions
+window.toggleUploadMenu = toggleUploadMenu;
+window.triggerImageUpload = triggerImageUpload;
+window.triggerDocumentUpload = triggerDocumentUpload;
+window.uploadImageVideo = uploadImageVideo;
+window.uploadDocument = uploadDocument;
+window.downloadDocument = downloadDocument;

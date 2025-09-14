@@ -152,6 +152,35 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes recordingPulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* ===== Components ===== */
 
 /* Buttons */
@@ -217,6 +246,16 @@ body {
 
 .btn-warning:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--warning-600) 0%, #b45309 100%);
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--success-500) 0%, var(--success-600) 100%);
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--success-600) 0%, #047857 100%);
   transform: translateY(-1px);
 }
 
@@ -553,6 +592,116 @@ body {
   gap: var(--space-3);
 }
 
+/* ===== Voice Recording Modal ===== */
+.voice-recording-modal {
+  max-width: 450px;
+  min-height: 400px;
+}
+
+.voice-recording-interface {
+  text-align: center;
+  padding: var(--space-4);
+}
+
+.recording-visualizer {
+  margin-bottom: var(--space-8);
+}
+
+.recording-icon {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto var(--space-4);
+  background: var(--bg-tertiary);
+  border: 3px solid var(--border-color);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.recording-icon.recording {
+  background: var(--danger-500);
+  border-color: var(--danger-500);
+  color: white;
+  animation: recordingPulse 1.5s infinite;
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+}
+
+.recording-icon.recording::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border: 2px solid var(--danger-500);
+  border-radius: var(--radius-full);
+  opacity: 0.3;
+  animation: pulse 2s infinite;
+}
+
+.recording-status {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.recording-timer {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary-500);
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em;
+}
+
+.recording-timer.recording {
+  color: var(--danger-500);
+}
+
+.recording-controls {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.recording-btn {
+  min-width: 140px;
+  position: relative;
+}
+
+.recording-btn.recording {
+  background: var(--danger-500);
+  border-color: var(--danger-500);
+  animation: recordingPulse 1.5s infinite;
+}
+
+.recording-btn.recording:hover {
+  background: var(--danger-600);
+}
+
+.recording-info {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.recording-info p {
+  margin: 0;
+  margin-bottom: var(--space-2);
+}
+
+.recording-info p:last-child {
+  margin-bottom: 0;
+}
+
 /* ===== Mobile Navigation Overlay ===== */
 .mobile-nav-overlay {
   position: fixed;
@@ -690,6 +839,60 @@ body {
   max-height: 60vh;
   max-height: 60dvh;
   overflow-y: auto;
+}
+
+/* ===== Upload Menu Dropdown ===== */
+.upload-dropdown {
+  position: relative;
+}
+
+.upload-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: var(--space-2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(20px);
+  z-index: 100;
+  min-width: 160px;
+  animation: bounceIn var(--transition-normal);
+}
+
+.upload-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.upload-option:hover {
+  background: var(--bg-accent);
+  color: var(--primary-500);
+  transform: translateX(4px);
+}
+
+.upload-option svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.upload-option:hover svg {
+  color: var(--primary-500);
 }
 
 /* ===== Layout ===== */
@@ -1562,6 +1765,7 @@ body {
   background: var(--danger-600);
 }
 
+/* Media Messages */
 .message img,
 .message video {
   max-width: 300px;
@@ -1569,6 +1773,192 @@ body {
   border-radius: var(--radius-md);
   margin-top: var(--space-2);
   border: 1px solid var(--border-color);
+}
+
+/* Audio Messages */
+.audio-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  max-width: 300px;
+  margin-top: var(--space-2);
+}
+
+.message.own .audio-message {
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-color: var(--primary-500);
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.audio-play-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--bg-accent);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.message.own .audio-play-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.audio-play-btn:hover {
+  background: var(--primary-500);
+  color: white;
+  transform: scale(1.1);
+}
+
+.message.own .audio-play-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.audio-play-btn.playing {
+  background: var(--success-500);
+  color: white;
+}
+
+.audio-duration {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: 'Courier New', monospace;
+  min-width: 35px;
+}
+
+.message.own .audio-duration {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.audio-waveform {
+  flex: 1;
+  height: 30px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.message.own .audio-waveform {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.audio-progress {
+  height: 100%;
+  background: var(--primary-500);
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-fast);
+  width: 0%;
+}
+
+.message.own .audio-progress {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Document Messages */
+.document-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  max-width: 300px;
+  margin-top: var(--space-2);
+}
+
+.message.own .document-message {
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+  border-color: var(--primary-500);
+  color: white;
+}
+
+.document-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-accent);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.message.own .document-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.document-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.document-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.message.own .document-name {
+  color: white;
+}
+
+.document-size {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.message.own .document-size {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.document-download {
+  padding: var(--space-2);
+  background: var(--bg-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.message.own .document-download {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.document-download:hover {
+  background: var(--primary-500);
+  color: white;
+  transform: scale(1.1);
+}
+
+.message.own .document-download:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Message Input */
@@ -2031,6 +2421,36 @@ body {
     max-width: 85%;
   }
   
+  /* Mobile Upload Menu */
+  .upload-menu {
+    bottom: 120%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: var(--space-3);
+  }
+  
+  /* Mobile Voice Recording Modal */
+  .voice-recording-modal {
+    margin: var(--space-4);
+    width: auto;
+    max-width: none;
+    min-height: 350px;
+  }
+  
+  .recording-icon {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .recording-controls {
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  
+  .recording-btn {
+    min-width: 200px;
+  }
+  
   /* Modal adjustments for mobile */
   .modal-content {
     margin: var(--space-4);
@@ -2110,6 +2530,21 @@ body {
   .character-counter {
     margin-top: var(--space-2);
     padding: 0 var(--space-1);
+  }
+  
+  /* Mobile audio/document messages */
+  .audio-message,
+  .document-message {
+    max-width: 90%;
+  }
+  
+  .audio-waveform {
+    flex: 1;
+    min-width: 60px;
+  }
+  
+  .document-info {
+    min-width: 100px;
   }
 }
 
@@ -2213,6 +2648,30 @@ body {
   /* Character Counter adjustments for small screens */
   .character-counter {
     font-size: 0.7rem;
+  }
+  
+  /* Voice recording modal adjustments */
+  .voice-recording-modal {
+    min-height: 300px;
+  }
+  
+  .recording-icon {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .recording-timer {
+    font-size: 1.5rem;
+  }
+  
+  /* Smaller upload menu */
+  .upload-menu {
+    min-width: 140px;
+  }
+  
+  .upload-option {
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.8rem;
   }
 }
 
