@@ -1235,12 +1235,6 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // FIXED: Check if either user is already in a call
-      if (userCalls.has(callerId) || userCalls.has(friendId)) {
-        socket.emit('call_error', 'User is already in a call');
-        return;
-      }
-      
       // Check if friend allows calls
       const friendUser = await getUserById(friendId);
       if (friendUser?.settings?.allowCalls === false) {
