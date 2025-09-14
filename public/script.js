@@ -23,37 +23,10 @@ const PulseChat = {
         isReconnecting: false
     },
     
-    // Voice calling state
-    currentCall: null,
-    localStream: null,
-    peerConnection: null,
-    iceCandidateQueue: [], // Queue for early ICE candidates
-    callTimer: null,
-    callStartTime: null,
-    isCallMuted: false,
-    isSpeakerOn: false,
-    
     // UI Elements Cache
     elements: {
         // Audio elements
         notificationSound: null, // Will be created dynamically
-        
-        // Call UI Elements
-        activeCallOverlay: document.getElementById('activeCallOverlay'),
-        incomingCallModal: document.getElementById('incomingCallModal'),
-        callAvatar: document.getElementById('callAvatar'),
-        callUserName: document.getElementById('callUserName'),
-        callStatus: document.getElementById('callStatus'),
-        callTimer: document.getElementById('callTimer'),
-        callTimeRemaining: document.getElementById('callTimeRemaining'),
-        callTimeLeft: document.getElementById('callTimeLeft'),
-        muteBtn: document.getElementById('muteBtn'),
-        endCallBtn: document.getElementById('endCallBtn'),
-        speakerBtn: document.getElementById('speakerBtn'),
-        incomingCallAvatar: document.getElementById('incomingCallAvatar'),
-        incomingCallUserName: document.getElementById('incomingCallUserName'),
-        callBtn: document.getElementById('callBtn'),
-        mobileCallBtn: document.getElementById('mobileCallBtn'),
         
         // Mobile Navigation
         mobileNavOverlay: document.getElementById('mobileNavOverlay'),
@@ -128,7 +101,6 @@ const PulseChat = {
         friendUsername: document.getElementById('friendUsername'),
         allowFriendRequests: document.getElementById('allowFriendRequests'),
         allowNotifications: document.getElementById('allowNotifications'),
-        allowCalls: document.getElementById('allowCalls'),
         banReason: document.getElementById('banReason'),
         muteDuration: document.getElementById('muteDuration'),
         
@@ -136,7 +108,6 @@ const PulseChat = {
         profileUsername: document.getElementById('profileUsername'),
         profileTier: document.getElementById('profileTier'),
         profileRole: document.getElementById('profileRole'),
-        profileCallTime: document.getElementById('profileCallTime'),
         tierBenefitsList: document.getElementById('tierBenefitsList'),
         
         // Settings Tab Elements
@@ -156,337 +127,6 @@ const PulseChat = {
         notificationContainer: document.getElementById('notificationContainer')
     }
 };
-
-// ===== Voice Calling Functions =====
-
-// WebRTC Configuration - Multiple STUN servers for better connectivity
-const rtcConfiguration = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-    ]
-};
-
-async function setupWebRTC() {
-    console.log('Setting up WebRTC peer connection');
-    
-    PulseChat.peerConnection = new RTCPeerConnection(rtcConfiguration);
-    PulseChat.iceCandidateQueue = []; // Queue for early ICE candidates
-    
-    // Handle ICE candidates
-    PulseChat.peerConnection.onicecandidate = (event) => {
-        if (event.candidate && PulseChat.currentCall) {
-            console.log('Sending ICE candidate');
-            PulseChat.socket.emit('webrtc_ice_candidate', {
-                callId: PulseChat.currentCall.id,
-                candidate: event.candidate
-            });
-        }
-    };
-    
-    // Handle remote stream
-    PulseChat.peerConnection.ontrack = (event) => {
-        console.log('Received remote audio stream');
-        
-        // Remove any existing remote audio
-        const existingAudio = document.getElementById('remoteAudio');
-        if (existingAudio) {
-            existingAudio.remove();
-        }
-        
-        // Create new remote audio element
-        const remoteAudio = document.createElement('audio');
-        remoteAudio.id = 'remoteAudio';
-        remoteAudio.srcObject = event.streams[0];
-        remoteAudio.autoplay = true;
-        remoteAudio.volume = 1.0;
-        
-        // Ensure audio plays
-        remoteAudio.addEventListener('loadedmetadata', () => {
-            remoteAudio.play().catch(error => {
-                console.error('Error playing remote audio:', error);
-                // Try to play again after user interaction
-                document.addEventListener('click', () => {
-                    remoteAudio.play().catch(console.error);
-                }, { once: true });
-            });
-        });
-        
-        document.body.appendChild(remoteAudio);
-    };
-    
-    // Handle connection state changes
-    PulseChat.peerConnection.onconnectionstatechange = () => {
-        console.log('WebRTC connection state:', PulseChat.peerConnection.connectionState);
-        
-        if (PulseChat.peerConnection.connectionState === 'connected') {
-            updateCallStatus('Connected');
-            console.log('WebRTC connection established successfully');
-        } else if (PulseChat.peerConnection.connectionState === 'disconnected' || 
-                   PulseChat.peerConnection.connectionState === 'failed') {
-            console.log('WebRTC connection failed or disconnected');
-            if (PulseChat.currentCall) {
-                endCall();
-            }
-        }
-    };
-    
-    // Get user media and add to peer connection
-    try {
-        console.log('Requesting user media');
-        const stream = await getUserMedia();
-        
-        // Add all tracks to peer connection
-        stream.getTracks().forEach(track => {
-            console.log('Adding local track to peer connection');
-            PulseChat.peerConnection.addTrack(track, stream);
-        });
-        
-        return true;
-    } catch (error) {
-        console.error('Failed to setup WebRTC:', error);
-        throw error;
-    }
-}
-
-async function getUserMedia() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 48000,
-                channelCount: 1
-            }, 
-            video: false 
-        });
-        
-        PulseChat.localStream = stream;
-        console.log('Got user media successfully');
-        return stream;
-    } catch (error) {
-        console.error('Error accessing media devices:', error);
-        throw new Error('Could not access microphone. Please check permissions and try again.');
-    }
-}
-
-function initiateCall() {
-    if (!PulseChat.selectedFriend) {
-        showNotification('Please select a friend to call', 'error');
-        return;
-    }
-    
-    if (PulseChat.currentCall) {
-        showNotification('You are already in a call', 'error');
-        return;
-    }
-    
-    console.log('Initiating call to:', PulseChat.selectedFriend.friendUsername);
-    
-    PulseChat.socket.emit('initiate_call', {
-        friendId: PulseChat.selectedFriend.friendId
-    });
-}
-
-function answerCall(accept) {
-    if (!PulseChat.currentCall) return;
-    
-    console.log('Answering call:', accept);
-    
-    PulseChat.socket.emit('answer_call', {
-        callId: PulseChat.currentCall.id,
-        accept: accept
-    });
-    
-    hideModal(PulseChat.elements.incomingCallModal);
-    
-    if (!accept) {
-        cleanupCall();
-    }
-}
-
-function endCall() {
-    if (PulseChat.currentCall) {
-        PulseChat.socket.emit('end_call', {
-            callId: PulseChat.currentCall.id
-        });
-    }
-    cleanupCall();
-}
-
-function cleanupCall() {
-    console.log('Cleaning up call');
-    
-    // Stop call timer
-    if (PulseChat.callTimer) {
-        clearInterval(PulseChat.callTimer);
-        PulseChat.callTimer = null;
-    }
-    
-    // Clean up WebRTC
-    if (PulseChat.localStream) {
-        PulseChat.localStream.getTracks().forEach(track => {
-            track.stop();
-            console.log('Stopped local track');
-        });
-        PulseChat.localStream = null;
-    }
-    
-    if (PulseChat.peerConnection) {
-        PulseChat.peerConnection.close();
-        PulseChat.peerConnection = null;
-        console.log('Closed peer connection');
-    }
-    
-    // Remove remote audio element
-    const remoteAudio = document.getElementById('remoteAudio');
-    if (remoteAudio) {
-        remoteAudio.remove();
-        console.log('Removed remote audio element');
-    }
-    
-    // Clear ICE candidate queue
-    PulseChat.iceCandidateQueue = [];
-    
-    // Reset call state
-    PulseChat.currentCall = null;
-    PulseChat.callStartTime = null;
-    PulseChat.isCallMuted = false;
-    PulseChat.isSpeakerOn = false;
-    
-    // Hide call UI
-    PulseChat.elements.activeCallOverlay.classList.add('hidden');
-    hideModal(PulseChat.elements.incomingCallModal);
-    
-    // Reset call button states
-    updateCallButtonStates();
-    updateCallAvailability();
-    
-    console.log('Call cleanup completed');
-}
-
-function toggleMute() {
-    if (!PulseChat.localStream) return;
-    
-    PulseChat.isCallMuted = !PulseChat.isCallMuted;
-    
-    PulseChat.localStream.getAudioTracks().forEach(track => {
-        track.enabled = !PulseChat.isCallMuted;
-    });
-    
-    updateCallButtonStates();
-}
-
-function toggleSpeaker() {
-    PulseChat.isSpeakerOn = !PulseChat.isSpeakerOn;
-    
-    const remoteAudio = document.getElementById('remoteAudio');
-    if (remoteAudio) {
-        // Note: Speaker control is limited in browsers for security reasons
-        // This mainly affects mobile devices
-        if (remoteAudio.setSinkId) {
-            remoteAudio.setSinkId(PulseChat.isSpeakerOn ? 'default' : '').catch(console.error);
-        }
-    }
-    
-    updateCallButtonStates();
-}
-
-function updateCallButtonStates() {
-    if (PulseChat.elements.muteBtn) {
-        PulseChat.elements.muteBtn.classList.toggle('active', PulseChat.isCallMuted);
-        PulseChat.elements.muteBtn.title = PulseChat.isCallMuted ? 'Unmute' : 'Mute';
-    }
-    
-    if (PulseChat.elements.speakerBtn) {
-        PulseChat.elements.speakerBtn.classList.toggle('active', PulseChat.isSpeakerOn);
-        PulseChat.elements.speakerBtn.title = PulseChat.isSpeakerOn ? 'Disable Speaker' : 'Enable Speaker';
-    }
-}
-
-function updateCallStatus(status) {
-    if (PulseChat.elements.callStatus) {
-        setSafeTextContent(PulseChat.elements.callStatus, status);
-    }
-}
-
-function startCallTimer() {
-    if (PulseChat.callTimer) {
-        clearInterval(PulseChat.callTimer);
-    }
-    
-    PulseChat.callStartTime = Date.now();
-    
-    PulseChat.callTimer = setInterval(() => {
-        if (!PulseChat.callStartTime) return;
-        
-        const elapsed = Date.now() - PulseChat.callStartTime;
-        const minutes = Math.floor(elapsed / 60000);
-        const seconds = Math.floor((elapsed % 60000) / 1000);
-        
-        const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        
-        if (PulseChat.elements.callTimer) {
-            setSafeTextContent(PulseChat.elements.callTimer, timeString);
-            PulseChat.elements.callTimer.classList.remove('hidden');
-        }
-    }, 1000);
-}
-
-function formatCallTime(milliseconds) {
-    if (milliseconds === -1) return 'Unlimited';
-    if (milliseconds === 0) return '00:00';
-    
-    const totalMinutes = Math.floor(milliseconds / 60000);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else {
-        return `${minutes}m`;
-    }
-}
-
-function updateCallTimeDisplay(remainingTime) {
-    if (PulseChat.elements.profileCallTime) {
-        const timeText = formatCallTime(remainingTime);
-        setSafeTextContent(PulseChat.elements.profileCallTime, timeText);
-        
-        // Update badge styling based on remaining time
-        const badge = PulseChat.elements.profileCallTime;
-        badge.classList.remove('unlimited', 'low', 'critical');
-        
-        if (remainingTime === -1) {
-            badge.classList.add('unlimited');
-        } else if (remainingTime < 3600000) { // Less than 1 hour
-            badge.classList.add('critical');
-        } else if (remainingTime < 7200000) { // Less than 2 hours
-            badge.classList.add('low');
-        }
-    }
-    
-    if (PulseChat.elements.callTimeLeft) {
-        setSafeTextContent(PulseChat.elements.callTimeLeft, formatCallTime(remainingTime));
-    }
-}
-
-function updateCallAvailability() {
-    const canCall = PulseChat.currentUser && 
-                   PulseChat.selectedFriend && 
-                   !PulseChat.currentCall &&
-                   PulseChat.currentUser.settings?.allowCalls !== false;
-    
-    if (PulseChat.elements.callBtn) {
-        PulseChat.elements.callBtn.disabled = !canCall;
-    }
-    
-    if (PulseChat.elements.mobileCallBtn) {
-        PulseChat.elements.mobileCallBtn.disabled = !canCall;
-    }
-}
 
 // ===== Message Input Focus Detection =====
 
@@ -808,11 +448,6 @@ function fullReconnect() {
     PulseChat.blockedUsers = [];
     PulseChat.messages = [];
     
-    // End any active calls
-    if (PulseChat.currentCall) {
-        cleanupCall();
-    }
-    
     // Disconnect old socket
     if (PulseChat.socket) {
         PulseChat.socket.disconnect();
@@ -919,11 +554,6 @@ function setupSocketHandlers() {
             roleBadge.classList.remove('hidden');
         }
         
-        // Update call time display
-        if (data.callTimeRemaining !== undefined) {
-            updateCallTimeDisplay(data.callTimeRemaining);
-        }
-        
         // Update profile tab if it's visible
         if (PulseChat.currentSettingsTab === 'profile') {
             updateProfileTab();
@@ -942,7 +572,6 @@ function setupSocketHandlers() {
         `;
         setSafeTextContent(PulseChat.elements.chatTitle, 'Select a friend to start chatting');
         disableInputs();
-        updateCallAvailability();
     });
 
     PulseChat.socket.on('session_token', (token) => {
@@ -971,263 +600,11 @@ function setupSocketHandlers() {
         showNotification(`You have been muted for ${sanitizedDuration}. Reason: ${sanitizedReason}`, 'error');
     });
 
-    // Voice Calling Events
-    PulseChat.socket.on('incoming_call', (data) => {
-        if (PulseChat.currentCall) {
-            // Already in a call, automatically decline
-            PulseChat.socket.emit('answer_call', {
-                callId: data.callId,
-                accept: false
-            });
-            return;
-        }
-        
-        PulseChat.currentCall = {
-            id: data.callId,
-            type: 'incoming',
-            callerUsername: data.callerUsername,
-            callerId: data.callerId
-        };
-        
-        // Update incoming call modal
-        setSafeTextContent(PulseChat.elements.incomingCallAvatar, data.callerUsername.charAt(0).toUpperCase());
-        setSafeTextContent(PulseChat.elements.incomingCallUserName, data.callerUsername);
-        
-        // Show incoming call modal
-        showModal(PulseChat.elements.incomingCallModal);
-        
-        // Play ringtone sound if available
-        playNotificationSound();
-    });
-    
-    PulseChat.socket.on('call_initiated', (data) => {
-        if (!PulseChat.selectedFriend) return;
-        
-        PulseChat.currentCall = {
-            id: data.callId,
-            type: 'outgoing',
-            friendUsername: PulseChat.selectedFriend.friendUsername,
-            friendId: PulseChat.selectedFriend.friendId
-        };
-        
-        // Update call overlay
-        setSafeTextContent(PulseChat.elements.callAvatar, PulseChat.selectedFriend.friendUsername.charAt(0).toUpperCase());
-        setSafeTextContent(PulseChat.elements.callUserName, PulseChat.selectedFriend.friendUsername);
-        updateCallStatus('Calling...');
-        
-        // Show call overlay
-        PulseChat.elements.activeCallOverlay.classList.remove('hidden');
-        
-        // Hide timer initially
-        PulseChat.elements.callTimer.classList.add('hidden');
-        PulseChat.elements.callTimeRemaining.classList.add('hidden');
-        
-        updateCallAvailability();
-    });
-    
-    // Fixed WebRTC Socket Handlers
-    PulseChat.socket.on('call_answered', async (data) => {
-        if (!PulseChat.currentCall || PulseChat.currentCall.id !== data.callId) return;
-        
-        try {
-            console.log('Call was answered, setting up WebRTC as caller');
-            updateCallStatus('Connecting...');
-            
-            // Setup WebRTC (gets media and creates peer connection)
-            await setupWebRTC();
-            
-            // Create and send offer
-            console.log('Creating offer');
-            const offer = await PulseChat.peerConnection.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: false
-            });
-            
-            await PulseChat.peerConnection.setLocalDescription(offer);
-            console.log('Sending offer');
-            
-            PulseChat.socket.emit('webrtc_offer', {
-                callId: data.callId,
-                offer: offer
-            });
-            
-        } catch (error) {
-            console.error('Error handling call answer:', error);
-            showNotification('Failed to connect call: ' + error.message, 'error');
-            endCall();
-        }
-    });
-    
-    PulseChat.socket.on('call_connected', async (data) => {
-        if (!PulseChat.currentCall || PulseChat.currentCall.id !== data.callId) return;
-        
-        try {
-            console.log('Connected to call, setting up WebRTC as receiver');
-            
-            // Setup WebRTC (gets media and creates peer connection)
-            await setupWebRTC();
-            
-            // Show call overlay if not already shown
-            if (PulseChat.elements.activeCallOverlay.classList.contains('hidden')) {
-                setSafeTextContent(PulseChat.elements.callAvatar, PulseChat.currentCall.callerUsername.charAt(0).toUpperCase());
-                setSafeTextContent(PulseChat.elements.callUserName, PulseChat.currentCall.callerUsername);
-                PulseChat.elements.activeCallOverlay.classList.remove('hidden');
-            }
-            
-            updateCallStatus('Waiting for connection...');
-            updateCallAvailability();
-            
-        } catch (error) {
-            console.error('Error connecting call:', error);
-            showNotification('Failed to connect call: ' + error.message, 'error');
-            endCall();
-        }
-    });
-    
-    PulseChat.socket.on('call_ended', (data) => {
-        const reason = data.reason || 'Call ended';
-        
-        // Show notification about call end reason
-        if (reason === 'timeout') {
-            showNotification('Call was not answered', 'info');
-        } else if (reason === 'declined') {
-            showNotification('Call was declined', 'info');
-        } else if (reason === 'time_limit_reached') {
-            showNotification('Call ended - time limit reached', 'warning');
-        } else if (reason === 'insufficient_time') {
-            showNotification('Call ended - insufficient call time', 'warning');
-        }
-        
-        cleanupCall();
-        updateCallAvailability();
-    });
-    
-    PulseChat.socket.on('call_error', (message) => {
-        showNotification(message, 'error');
-        cleanupCall();
-        updateCallAvailability();
-    });
-    
-    PulseChat.socket.on('call_time_update', (data) => {
-        if (data.remainingTime !== undefined) {
-            updateCallTimeDisplay(data.remainingTime);
-        }
-        
-        // Update call time remaining display in active call
-        if (PulseChat.elements.callTimeLeft && data.remainingTime !== -1) {
-            setSafeTextContent(PulseChat.elements.callTimeLeft, formatCallTime(data.remainingTime));
-            PulseChat.elements.callTimeRemaining.classList.remove('hidden');
-        }
-    });
-    
-    PulseChat.socket.on('call_time_remaining', (data) => {
-        updateCallTimeDisplay(data.remainingTime);
-    });
-    
-    // WebRTC signaling events - Fixed handlers
-    PulseChat.socket.on('webrtc_offer', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
-            console.log('Received offer but no current call or peer connection');
-            return;
-        }
-        
-        try {
-            console.log('Received WebRTC offer');
-            
-            // Set remote description
-            await PulseChat.peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-            console.log('Set remote description from offer');
-            
-            // Process any queued ICE candidates
-            if (PulseChat.iceCandidateQueue) {
-                console.log('Processing queued ICE candidates:', PulseChat.iceCandidateQueue.length);
-                for (const candidate of PulseChat.iceCandidateQueue) {
-                    await PulseChat.peerConnection.addIceCandidate(candidate);
-                }
-                PulseChat.iceCandidateQueue = [];
-            }
-            
-            // Create and send answer
-            console.log('Creating answer');
-            const answer = await PulseChat.peerConnection.createAnswer();
-            await PulseChat.peerConnection.setLocalDescription(answer);
-            
-            console.log('Sending answer');
-            PulseChat.socket.emit('webrtc_answer', {
-                callId: data.callId,
-                answer: answer
-            });
-            
-        } catch (error) {
-            console.error('Error handling WebRTC offer:', error);
-            endCall();
-        }
-    });
-    
-    PulseChat.socket.on('webrtc_answer', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
-            console.log('Received answer but no current call or peer connection');
-            return;
-        }
-        
-        try {
-            console.log('Received WebRTC answer');
-            
-            // Set remote description
-            await PulseChat.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            console.log('Set remote description from answer');
-            
-            // Process any queued ICE candidates
-            if (PulseChat.iceCandidateQueue) {
-                console.log('Processing queued ICE candidates:', PulseChat.iceCandidateQueue.length);
-                for (const candidate of PulseChat.iceCandidateQueue) {
-                    await PulseChat.peerConnection.addIceCandidate(candidate);
-                }
-                PulseChat.iceCandidateQueue = [];
-            }
-            
-            updateCallStatus('Connected');
-            startCallTimer();
-            PulseChat.elements.callTimeRemaining.classList.remove('hidden');
-            
-        } catch (error) {
-            console.error('Error handling WebRTC answer:', error);
-            endCall();
-        }
-    });
-    
-    PulseChat.socket.on('webrtc_ice_candidate', async (data) => {
-        if (!PulseChat.currentCall || !PulseChat.peerConnection) {
-            console.log('Received ICE candidate but no current call or peer connection');
-            return;
-        }
-        
-        try {
-            const candidate = new RTCIceCandidate(data.candidate);
-            
-            // Check if we have remote description set
-            if (PulseChat.peerConnection.remoteDescription) {
-                console.log('Adding ICE candidate immediately');
-                await PulseChat.peerConnection.addIceCandidate(candidate);
-            } else {
-                console.log('Queueing ICE candidate (no remote description yet)');
-                if (!PulseChat.iceCandidateQueue) {
-                    PulseChat.iceCandidateQueue = [];
-                }
-                PulseChat.iceCandidateQueue.push(candidate);
-            }
-            
-        } catch (error) {
-            console.error('Error adding ICE candidate:', error);
-        }
-    });
-
     // Friends Events
     PulseChat.socket.on('friends_list', (friendsList) => {
         PulseChat.friends = friendsList;
         renderFriendsList();
         renderMobileFriendsList();
-        updateCallAvailability();
     });
 
     PulseChat.socket.on('friend_requests', (requests) => {
@@ -1359,7 +736,6 @@ function setupSocketHandlers() {
             `;
             setSafeTextContent(PulseChat.elements.chatTitle, 'Select a friend to start chatting');
             disableInputs();
-            updateCallAvailability();
         }
     });
 
@@ -1386,21 +762,11 @@ function setupSocketHandlers() {
         if (PulseChat.elements.allowNotifications) {
             PulseChat.elements.allowNotifications.checked = settings.allowNotifications !== false;
         }
-        if (PulseChat.elements.allowCalls) {
-            PulseChat.elements.allowCalls.checked = settings.allowCalls !== false;
-        }
-        
-        // Update call time display
-        if (settings.callTimeRemaining !== undefined) {
-            updateCallTimeDisplay(settings.callTimeRemaining);
-        }
         
         // Update current user settings
         if (PulseChat.currentUser) {
             PulseChat.currentUser.settings = settings;
         }
-        
-        updateCallAvailability();
     });
 
     PulseChat.socket.on('settings_updated', (settings) => {
@@ -1410,7 +776,6 @@ function setupSocketHandlers() {
         } else {
             PulseChat.currentUser.settings = settings;
         }
-        updateCallAvailability();
         setTimeout(() => {
             closeSettings();
         }, 1500);
@@ -1431,21 +796,18 @@ const TIER_BENEFITS = {
     1: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
-        { text: 'Voice calls (20h/week)', available: true },
         { text: 'Image uploads', available: false },
         { text: 'Video uploads', available: false }
     ],
     2: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
-        { text: 'Voice calls (30h/week)', available: true },
         { text: 'Image uploads', available: true },
         { text: 'Video uploads', available: false }
     ],
     3: [
         { text: 'Basic messaging', available: true },
         { text: 'Friend system', available: true },
-        { text: 'Voice calls (40h/week)', available: true },
         { text: 'Image uploads', available: true },
         { text: 'Video uploads', available: true }
     ]
@@ -1509,11 +871,6 @@ function updateProfileTab() {
         roleElement.className = `role-badge ${escapeHtml(role)}`;
     }
     
-    // Request current call time
-    if (PulseChat.socket) {
-        PulseChat.socket.emit('get_call_time');
-    }
-    
     // Update tier benefits
     updateTierBenefits();
 }
@@ -1567,22 +924,6 @@ function updateTierBenefits() {
         });
         
         PulseChat.elements.tierBenefitsList.appendChild(specialDiv);
-        
-        // Add unlimited calls note for admin/owner
-        if (['admin', 'owner'].includes(userRole)) {
-            const unlimitedDiv = document.createElement('div');
-            unlimitedDiv.className = 'benefit-item available';
-            
-            setSafeHTML(unlimitedDiv, `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12,6 12,12 16,14"></polyline>
-                </svg>
-                <span>Unlimited voice calls</span>
-            `);
-            
-            PulseChat.elements.tierBenefitsList.appendChild(unlimitedDiv);
-        }
     }
 }
 
@@ -1746,9 +1087,6 @@ function updateMobileUserInfo(friend) {
     } else {
         mobileAdminActions.classList.add('hidden');
     }
-    
-    // Update call button availability
-    updateCallAvailability();
 }
 
 // ===== Utility Functions =====
@@ -1874,11 +1212,6 @@ function register() {
 }
 
 function logout() {
-    // End any active calls before logging out
-    if (PulseChat.currentCall) {
-        endCall();
-    }
-    
     PulseChat.socket.emit('logout');
 }
 
@@ -2150,9 +1483,6 @@ function selectFriend(friend) {
     updateUserInfoPanel(friend);
     updateMobileUserInfo(friend);
     PulseChat.elements.userInfoPanel.classList.remove('hidden');
-    
-    // Update call button availability
-    updateCallAvailability();
     
     // Load messages
     PulseChat.socket.emit('load_messages', { friendId: friend.friendId });
@@ -2489,46 +1819,18 @@ function closeSettings() {
 function saveSettings() {
     const allowFriendRequests = PulseChat.elements.allowFriendRequests.checked;
     const allowNotifications = PulseChat.elements.allowNotifications.checked;
-    const allowCalls = PulseChat.elements.allowCalls.checked;
     
     PulseChat.socket.emit('update_settings', { 
         allowFriendRequests,
-        allowNotifications,
-        allowCalls
+        allowNotifications 
     });
 }
 
 // ===== Event Listeners =====
 
-// Call button event listeners
-if (PulseChat.elements.muteBtn) {
-    PulseChat.elements.muteBtn.addEventListener('click', toggleMute);
-}
-
-if (PulseChat.elements.speakerBtn) {
-    PulseChat.elements.speakerBtn.addEventListener('click', toggleSpeaker);
-}
-
-if (PulseChat.elements.endCallBtn) {
-    PulseChat.elements.endCallBtn.addEventListener('click', endCall);
-}
-
-if (PulseChat.elements.callBtn) {
-    PulseChat.elements.callBtn.addEventListener('click', initiateCall);
-}
-
-if (PulseChat.elements.mobileCallBtn) {
-    PulseChat.elements.mobileCallBtn.addEventListener('click', initiateCall);
-}
-
 // Mobile Navigation Event Listeners
 PulseChat.elements.mobileMenuBtn.addEventListener('click', openMobileNav);
 PulseChat.elements.mobileNavClose.addEventListener('click', closeMobileNav);
-
-// Mobile user header click
-if (PulseChat.elements.mobileUserHeader) {
-    PulseChat.elements.mobileUserHeader.addEventListener('click', showMobileUserInfo);
-}
 
 // Mobile navigation backdrop click
 document.addEventListener('click', function(e) {
@@ -2596,12 +1898,6 @@ document.addEventListener('click', function(e) {
             // Don't close auth modals by clicking backdrop
             return;
         }
-        
-        // Don't close call modals by clicking backdrop
-        if (modal.id === 'incomingCallModal') {
-            return;
-        }
-        
         hideModal(modal);
         
         // Clear specific modal data
@@ -2625,27 +1921,6 @@ window.addEventListener('resize', function() {
     }
 });
 
-// Handle page visibility changes for call management
-document.addEventListener('visibilitychange', function() {
-    if (document.hidden && PulseChat.currentCall) {
-        // User switched away from tab during call
-        console.log('User switched away during call');
-    }
-});
-
-// Handle beforeunload for active calls
-window.addEventListener('beforeunload', function(e) {
-    if (PulseChat.currentCall) {
-        // End the call before page unload
-        endCall();
-        
-        // Show warning to user
-        e.preventDefault();
-        e.returnValue = 'You have an active call. Are you sure you want to leave?';
-        return e.returnValue;
-    }
-});
-
 // ===== Initialization =====
 
 window.addEventListener('load', () => {
@@ -2659,9 +1934,6 @@ window.addEventListener('load', () => {
     
     // Try auto-login
     checkAutoLogin();
-    
-    // Initialize call button states
-    updateCallButtonStates();
 });
 
 // Make functions available globally for HTML onclick handlers
@@ -2691,10 +1963,3 @@ window.saveSettings = saveSettings;
 window.showMobileUserInfo = showMobileUserInfo;
 window.closeMobileUserInfo = closeMobileUserInfo;
 window.switchSettingsTab = switchSettingsTab;
-
-// Voice calling functions
-window.initiateCall = initiateCall;
-window.answerCall = answerCall;
-window.endCall = endCall;
-window.toggleMute = toggleMute;
-window.toggleSpeaker = toggleSpeaker;

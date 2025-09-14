@@ -8,7 +8,8 @@
     "banned": false,
     "created": 1757621678732,
     "settings": {
-      "allowFriendRequests": true
+      "allowFriendRequests": true,
+      "allowNotifications": true
     }
   },
   {

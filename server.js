@@ -24,16 +24,6 @@ const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
 const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
 const MAX_MESSAGES_PER_CHAT = 250; // Maximum messages to keep per chat
 
-// Call time limits per week (in milliseconds)
-const CALL_TIME_LIMITS = {
-  1: 20 * 60 * 60 * 1000, // Tier 1: 20 hours
-  2: 30 * 60 * 60 * 1000, // Tier 2: 30 hours
-  3: 40 * 60 * 60 * 1000, // Tier 3: 40 hours
-  developer: 40 * 60 * 60 * 1000, // Developer: 40 hours
-  admin: -1, // Unlimited
-  owner: -1  // Unlimited
-};
-
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
@@ -63,11 +53,6 @@ const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
 
-// Voice calling state management - FIXED VERSION
-const activeCalls = new Map(); // callId -> { caller, receiver, startTime, answeredTime, status }
-const userCalls = new Map();   // userId -> callId (only when actually in call, not ringing)
-const callTimeTracking = new Map(); // callId -> { startTime, lastUpdate }
-
 // Ensure directories exist
 async function initializeDirectories() {
   const dirs = [
@@ -79,8 +64,7 @@ async function initializeDirectories() {
     'private/users',
     'private/friends',
     'private/logins',
-    'private/mutes',
-    'private/calls'
+    'private/mutes'
   ];
   
   for (const dir of dirs) {
@@ -99,8 +83,7 @@ async function initializeDirectories() {
     'private/users/users.json',
     'private/friends/friends.json',
     'private/logins/logins.json',
-    'private/mutes/mutes.json',
-    'private/calls/calls.json'
+    'private/mutes/mutes.json'
   ];
   
   for (const file of files) {
@@ -110,102 +93,6 @@ async function initializeDirectories() {
       await fs.writeFile(file, JSON.stringify([], null, 2));
     }
   }
-}
-
-// Week calculation functions
-function getCurrentWeek() {
-  const now = new Date();
-  const dayOfMonth = now.getDate();
-  
-  if (dayOfMonth <= 7) return 1;
-  if (dayOfMonth <= 14) return 2;
-  if (dayOfMonth <= 21) return 3;
-  return 4; // 22-31
-}
-
-function getCurrentMonth() {
-  return new Date().getMonth() + 1; // 1-12
-}
-
-function getCurrentYear() {
-  return new Date().getFullYear();
-}
-
-// Call time management functions
-async function getUserCallTimeData(userId) {
-  const callData = await loadJSON('private/calls/calls.json');
-  const currentWeek = getCurrentWeek();
-  const currentMonth = getCurrentMonth();
-  const currentYear = getCurrentYear();
-  
-  let userRecord = callData.find(record => record.userId === userId);
-  
-  if (!userRecord) {
-    userRecord = {
-      userId,
-      week: currentWeek,
-      month: currentMonth,
-      year: currentYear,
-      timeUsed: 0
-    };
-    callData.push(userRecord);
-    await saveJSON('private/calls/calls.json', callData);
-  }
-  
-  // Reset if we're in a new week/month/year
-  if (userRecord.week !== currentWeek || userRecord.month !== currentMonth || userRecord.year !== currentYear) {
-    userRecord.week = currentWeek;
-    userRecord.month = currentMonth;
-    userRecord.year = currentYear;
-    userRecord.timeUsed = 0;
-    await saveJSON('private/calls/calls.json', callData);
-  }
-  
-  return userRecord;
-}
-
-async function updateUserCallTime(userId, timeToAdd) {
-  const callData = await loadJSON('private/calls/calls.json');
-  const userRecord = await getUserCallTimeData(userId);
-  
-  userRecord.timeUsed += timeToAdd;
-  
-  const recordIndex = callData.findIndex(record => record.userId === userId);
-  if (recordIndex !== -1) {
-    callData[recordIndex] = userRecord;
-  }
-  
-  await saveJSON('private/calls/calls.json', callData);
-  return userRecord.timeUsed;
-}
-
-async function getUserRemainingCallTime(userId) {
-  const user = await getUserById(userId);
-  if (!user) return 0;
-  
-  // Unlimited for admins and owners
-  if (user.role === 'admin' || user.role === 'owner') {
-    return -1; // Unlimited
-  }
-  
-  // Get time limit based on tier/role
-  let timeLimit;
-  if (user.role === 'developer') {
-    timeLimit = CALL_TIME_LIMITS.developer;
-  } else {
-    const tier = getUserTier(user);
-    timeLimit = CALL_TIME_LIMITS[tier];
-  }
-  
-  const userRecord = await getUserCallTimeData(userId);
-  const remainingTime = timeLimit - userRecord.timeUsed;
-  
-  return Math.max(0, remainingTime);
-}
-
-async function canUserStartCall(userId) {
-  const remainingTime = await getUserRemainingCallTime(userId);
-  return remainingTime === -1 || remainingTime > 0; // -1 means unlimited
 }
 
 // File upload configuration - Using memory storage first for validation
@@ -783,37 +670,6 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
-// FIXED Voice calling functions
-function endCall(callId, reason) {
-  const call = activeCalls.get(callId);
-  if (!call) return;
-  
-  const callerSocket = getSocketByUserId(call.caller);
-  const receiverSocket = getSocketByUserId(call.receiver);
-  
-  // Calculate call duration
-  const duration = call.answeredTime ? Date.now() - call.answeredTime : 0;
-  
-  // Stop tracking time for this call
-  callTimeTracking.delete(callId);
-  
-  // Notify both users
-  if (callerSocket) {
-    callerSocket.emit('call_ended', { callId, reason, duration });
-  }
-  
-  if (receiverSocket) {
-    receiverSocket.emit('call_ended', { callId, reason, duration });
-  }
-  
-  // Clean up - FIXED: Remove both users from userCalls
-  activeCalls.delete(callId);
-  userCalls.delete(call.caller);
-  userCalls.delete(call.receiver);
-  
-  console.log(`Call ${callId} ended: ${reason}, duration: ${duration}ms`);
-}
-
 // Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
@@ -1024,45 +880,6 @@ async function isUserMuted(userId) {
   return mute !== undefined;
 }
 
-// Real-time call time update function
-async function sendCallTimeUpdate(callId) {
-  const call = activeCalls.get(callId);
-  if (!call || call.status !== 'active') return;
-  
-  try {
-    const callerSocket = getSocketByUserId(call.caller);
-    const receiverSocket = getSocketByUserId(call.receiver);
-    
-    const callerRemainingTime = await getUserRemainingCallTime(call.caller);
-    const receiverRemainingTime = await getUserRemainingCallTime(call.receiver);
-    
-    if (callerSocket) {
-      callerSocket.emit('call_time_update', { 
-        callId, 
-        remainingTime: callerRemainingTime,
-        partnerRemainingTime: receiverRemainingTime
-      });
-    }
-    
-    if (receiverSocket) {
-      receiverSocket.emit('call_time_update', { 
-        callId, 
-        remainingTime: receiverRemainingTime,
-        partnerRemainingTime: callerRemainingTime 
-      });
-    }
-    
-    // Check if either user has run out of time
-    if ((callerRemainingTime === 0 && callerRemainingTime !== -1) || 
-        (receiverRemainingTime === 0 && receiverRemainingTime !== -1)) {
-      endCall(callId, 'time_limit_reached');
-    }
-    
-  } catch (error) {
-    console.error('Error sending call time update:', error);
-  }
-}
-
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -1111,13 +928,7 @@ io.on('connection', (socket) => {
       
       activeUsers.set(user.id, { socket: socket.id, lastActive: Date.now(), user });
       socket.userId = user.id;
-      
-      // Send user data with call time info
-      const remainingCallTime = await getUserRemainingCallTime(user.id);
-      socket.emit('authenticated', { 
-        user: { ...user, password: undefined },
-        callTimeRemaining: remainingCallTime
-      });
+      socket.emit('authenticated', { user: { ...user, password: undefined } });
       
       // Load and send friends list with full user details - SORTED BY LAST MESSAGE
       const friends = await loadJSON('private/friends/friends.json');
@@ -1193,285 +1004,6 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Authentication error:', error);
       socket.emit('auth_error', 'Server error');
-    }
-  });
-  
-  // FIXED Voice calling handlers
-  socket.on('initiate_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { friendId } = data;
-      const callerId = socket.userId;
-      
-      // Check if user is muted
-      if (await isUserMuted(callerId)) {
-        socket.emit('call_error', 'You are currently muted');
-        return;
-      }
-      
-      // Check if caller has call time remaining
-      if (!(await canUserStartCall(callerId))) {
-        socket.emit('call_error', 'You have no remaining call time this week');
-        return;
-      }
-      
-      // Check if friend has call time remaining
-      if (!(await canUserStartCall(friendId))) {
-        socket.emit('call_error', 'Your friend has no remaining call time this week');
-        return;
-      }
-      
-      // Verify friendship
-      const friends = await loadJSON('private/friends/friends.json');
-      const friendship = friends.find(f => 
-        ((f.user1 === callerId && f.user2 === friendId) ||
-         (f.user1 === friendId && f.user2 === callerId)) &&
-        f.status === 'accepted'
-      );
-      
-      if (!friendship) {
-        socket.emit('call_error', 'Can only call friends');
-        return;
-      }
-      
-      // Check if friend allows calls
-      const friendUser = await getUserById(friendId);
-      if (friendUser?.settings?.allowCalls === false) {
-        socket.emit('call_error', 'This user is not accepting calls');
-        return;
-      }
-      
-      // Create call session
-      const callId = generateUserId();
-      const call = {
-        id: callId,
-        caller: callerId,
-        receiver: friendId,
-        status: 'ringing',
-        startTime: Date.now()
-      };
-      
-      activeCalls.set(callId, call);
-      
-      // FIXED: Only mark caller as in call during ringing phase
-      userCalls.set(callerId, callId);
-      // DON'T mark receiver until they accept: userCalls.set(friendId, callId);
-      
-      // Notify receiver
-      const receiverSocket = getSocketByUserId(friendId);
-
-      const callerUser = await getUserById(callerId);
-      if (receiverSocket) {
-        receiverSocket.emit('incoming_call', {
-          callId,
-          callerUsername: callerUser.username,
-          callerId
-        });
-      }
-      
-      socket.emit('call_initiated', { callId, status: 'ringing' });
-      
-      // FIXED: Auto-cancel after 30 seconds if not answered
-      setTimeout(() => {
-        const currentCall = activeCalls.get(callId);
-        if (currentCall && currentCall.status === 'ringing') {
-          // Clean up caller from userCalls since receiver never accepted
-          userCalls.delete(callerId);
-          endCall(callId, 'timeout');
-        }
-      }, 30000);
-      
-    } catch (error) {
-      console.error('Initiate call error:', error);
-      socket.emit('call_error', 'Failed to initiate call');
-    }
-  });
-  
-  socket.on('answer_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, accept } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.receiver !== socket.userId) {
-        socket.emit('call_error', 'Invalid call');
-        return;
-      }
-      
-      if (accept) {
-        // Double-check both users still have call time
-        if (!(await canUserStartCall(call.caller)) || !(await canUserStartCall(call.receiver))) {
-          // Clean up caller from userCalls and end call
-          userCalls.delete(call.caller);
-          endCall(callId, 'insufficient_time');
-          return;
-        }
-        
-        // FIXED: Now mark receiver as in call since they accepted
-        userCalls.set(call.receiver, callId);
-        
-        // Accept the call
-        call.status = 'active';
-        call.answeredTime = Date.now();
-        
-        // Start tracking call time
-        callTimeTracking.set(callId, {
-          startTime: Date.now(),
-          lastUpdate: Date.now()
-        });
-        
-        const callerSocket = getSocketByUserId(call.caller);
-        const receiverSocket = getSocketByUserId(call.receiver);
-        
-        if (callerSocket) {
-          callerSocket.emit('call_answered', { callId });
-        }
-        
-        socket.emit('call_connected', { callId });
-        
-        // Start real-time time updates
-        const timeUpdateInterval = setInterval(async () => {
-          const currentCall = activeCalls.get(callId);
-          if (!currentCall || currentCall.status !== 'active') {
-            clearInterval(timeUpdateInterval);
-            return;
-          }
-          
-          const tracking = callTimeTracking.get(callId);
-          if (tracking) {
-            const now = Date.now();
-            const timeSinceLastUpdate = now - tracking.lastUpdate;
-            
-            // Update call time for both users
-            await updateUserCallTime(call.caller, timeSinceLastUpdate);
-            await updateUserCallTime(call.receiver, timeSinceLastUpdate);
-            
-            tracking.lastUpdate = now;
-            
-            // Send real-time updates
-            await sendCallTimeUpdate(callId);
-          }
-        }, 1000); // Update every second
-        
-      } else {
-        // FIXED: Decline the call - clean up caller
-        userCalls.delete(call.caller);
-        endCall(callId, 'declined');
-      }
-      
-    } catch (error) {
-      console.error('Answer call error:', error);
-      socket.emit('call_error', 'Failed to answer call');
-    }
-  });
-  
-  socket.on('end_call', async (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) {
-        socket.emit('call_error', 'Call not found');
-        return;
-      }
-      
-      // Only participants can end the call
-      if (call.caller !== socket.userId && call.receiver !== socket.userId) {
-        socket.emit('call_error', 'You are not in this call');
-        return;
-      }
-      
-      // Final time update before ending call
-      const tracking = callTimeTracking.get(callId);
-      if (tracking && call.status === 'active') {
-        const now = Date.now();
-        const finalTime = now - tracking.lastUpdate;
-        await updateUserCallTime(call.caller, finalTime);
-        await updateUserCallTime(call.receiver, finalTime);
-      }
-      
-      endCall(callId, 'ended');
-      
-    } catch (error) {
-      console.error('End call error:', error);
-      socket.emit('call_error', 'Failed to end call');
-    }
-  });
-  
-  socket.on('get_call_time', async () => {
-    try {
-      if (!socket.userId) return;
-      
-      const remainingTime = await getUserRemainingCallTime(socket.userId);
-      socket.emit('call_time_remaining', { remainingTime });
-      
-    } catch (error) {
-      console.error('Get call time error:', error);
-    }
-  });
-  
-  // WebRTC signaling for server-relayed audio
-  socket.on('webrtc_offer', (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, offer } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.caller !== socket.userId) return;
-      
-      const receiverSocket = getSocketByUserId(call.receiver);
-      if (receiverSocket) {
-        receiverSocket.emit('webrtc_offer', { callId, offer });
-      }
-      
-    } catch (error) {
-      console.error('WebRTC offer error:', error);
-    }
-  });
-  
-  socket.on('webrtc_answer', (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, answer } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call || call.receiver !== socket.userId) return;
-      
-      const callerSocket = getSocketByUserId(call.caller);
-      if (callerSocket) {
-        callerSocket.emit('webrtc_answer', { callId, answer });
-      }
-      
-    } catch (error) {
-      console.error('WebRTC answer error:', error);
-    }
-  });
-  
-  socket.on('webrtc_ice_candidate', (data) => {
-    try {
-      if (!socket.userId) return;
-      
-      const { callId, candidate } = data;
-      const call = activeCalls.get(callId);
-      
-      if (!call) return;
-      
-      // Forward ICE candidate to the other participant
-      const otherUserId = call.caller === socket.userId ? call.receiver : call.caller;
-      const otherSocket = getSocketByUserId(otherUserId);
-      
-      if (otherSocket) {
-        otherSocket.emit('webrtc_ice_candidate', { callId, candidate });
-      }
-      
-    } catch (error) {
-      console.error('WebRTC ICE candidate error:', error);
     }
   });
   
@@ -1988,12 +1520,12 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Updated settings handler with call permissions support
+  // Updated settings handler with notifications support
   socket.on('update_settings', async (data) => {
     try {
       if (!socket.userId) return;
       
-      const { allowFriendRequests, allowNotifications, allowCalls } = data;
+      const { allowFriendRequests, allowNotifications } = data;
       
       const users = await loadJSON('private/users/users.json');
       const userIndex = users.findIndex(u => u.id === socket.userId);
@@ -2016,16 +1548,11 @@ io.on('connection', (socket) => {
         users[userIndex].settings.allowNotifications = allowNotifications;
       }
       
-      if (allowCalls !== undefined) {
-        users[userIndex].settings.allowCalls = allowCalls;
-      }
-      
       await saveJSON('private/users/users.json', users);
       
       socket.emit('settings_updated', { 
         allowFriendRequests: users[userIndex].settings.allowFriendRequests,
-        allowNotifications: users[userIndex].settings.allowNotifications,
-        allowCalls: users[userIndex].settings.allowCalls
+        allowNotifications: users[userIndex].settings.allowNotifications
       });
       
     } catch (error) {
@@ -2036,23 +1563,6 @@ io.on('connection', (socket) => {
   
   socket.on('logout', async () => {
     if (socket.userId) {
-      // FIXED: End any active calls and clean up properly
-      const callId = userCalls.get(socket.userId);
-      if (callId) {
-        const call = activeCalls.get(callId);
-        if (call) {
-          // Final time update before ending call
-          const tracking = callTimeTracking.get(callId);
-          if (tracking && call.status === 'active') {
-            const now = Date.now();
-            const finalTime = now - tracking.lastUpdate;
-            await updateUserCallTime(call.caller, finalTime);
-            await updateUserCallTime(call.receiver, finalTime);
-          }
-          endCall(callId, 'disconnected');
-        }
-      }
-      
       // Remove all sessions for this user
       await deleteUserSessions(socket.userId);
       
@@ -2067,12 +1577,6 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
-      // FIXED: End any active calls and clean up properly
-      const callId = userCalls.get(socket.userId);
-      if (callId) {
-        endCall(callId, 'disconnected');
-      }
-      
       activeUsers.delete(socket.userId);
     }
   });
@@ -2103,8 +1607,7 @@ app.post('/api/register', async (req, res) => {
       created: Date.now(),
       settings: {
         allowFriendRequests: true,
-        allowNotifications: true, // Default notifications enabled
-        allowCalls: true // Default calls enabled
+        allowNotifications: true // Default notifications enabled
       }
     };
     
@@ -2495,15 +1998,13 @@ app.get('/api/admin/stats', async (req, res) => {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: activeMutes.length,
-      activeCalls: activeCalls.size
+      mutedUsers: activeMutes.length
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: 0,
-      activeCalls: activeCalls.size
+      mutedUsers: 0
     });
   }
 });
@@ -2542,13 +2043,9 @@ app.get('/api/settings', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    const remainingCallTime = await getUserRemainingCallTime(userId);
-    
     res.json({
       allowFriendRequests: user.settings?.allowFriendRequests ?? true,
-      allowNotifications: user.settings?.allowNotifications ?? true,
-      allowCalls: user.settings?.allowCalls ?? true,
-      callTimeRemaining: remainingCallTime
+      allowNotifications: user.settings?.allowNotifications ?? true
     });
     
   } catch (error) {
@@ -2641,48 +2138,6 @@ app.post('/api/settings/friend-requests', async (req, res) => {
   }
 });
 
-app.post('/api/settings/calls', async (req, res) => {
-  try {
-    const sessionToken = req.headers.authorization?.replace('Bearer ', '');
-    if (!sessionToken) {
-      return res.status(401).json({ error: 'No session token provided' });
-    }
-    
-    const userId = await getSessionUserId(sessionToken);
-    if (!userId) {
-      return res.status(401).json({ error: 'Invalid session token' });
-    }
-    
-    const { allowCalls } = req.body;
-    if (typeof allowCalls !== 'boolean') {
-      return res.status(400).json({ error: 'allowCalls must be a boolean' });
-    }
-    
-    const users = await loadJSON('private/users/users.json');
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    if (!users[userIndex].settings) {
-      users[userIndex].settings = {};
-    }
-    
-    users[userIndex].settings.allowCalls = allowCalls;
-    await saveJSON('private/users/users.json', users);
-    
-    res.json({ 
-      message: 'Calls setting updated successfully',
-      allowCalls 
-    });
-    
-  } catch (error) {
-    console.error('Update calls setting error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // Serve main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -2697,19 +2152,6 @@ setInterval(async () => {
   await cleanupOrphanedMediaFiles();  // Clean up orphaned files
 }, 30 * 60 * 1000); // Run every 30 minutes
 
-// Periodic cleanup of stale calls - runs every minute
-setInterval(() => {
-  const now = Date.now();
-  const staleCallTimeout = 5 * 60 * 1000; // 5 minutes
-  
-  for (const [callId, call] of activeCalls.entries()) {
-    if (now - call.startTime > staleCallTimeout) {
-      console.log(`Cleaning up stale call: ${callId}`);
-      endCall(callId, 'timeout');
-    }
-  }
-}, 60000); // Check every minute
-
 // Initialize and start server
 async function start() {
   await initializeDirectories();
@@ -2720,8 +2162,6 @@ async function start() {
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
     console.log(`Message retention: 48 hours`);
     console.log(`Max messages per chat: ${MAX_MESSAGES_PER_CHAT}`);
-    console.log(`Call time limits: Tier 1: 20h/week, Tier 2: 30h/week, Tier 3: 40h/week`);
-    console.log(`Week calculation: Days 1-7, 8-14, 15-21, 22-31 of each month`);
   });
 }
 
