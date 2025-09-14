@@ -63,9 +63,9 @@ const messageLimits = new Map();
 const uploadLimits = new Map();
 const friendRequestCooldowns = new Map();
 
-// Voice calling state management
-const activeCalls = new Map(); // callId -> { caller, receiver, startTime, answeredTime }
-const userCalls = new Map();   // userId -> callId
+// Voice calling state management - FIXED VERSION
+const activeCalls = new Map(); // callId -> { caller, receiver, startTime, answeredTime, status }
+const userCalls = new Map();   // userId -> callId (only when actually in call, not ringing)
 const callTimeTracking = new Map(); // callId -> { startTime, lastUpdate }
 
 // Ensure directories exist
@@ -783,7 +783,7 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
-// Voice calling functions
+// FIXED Voice calling functions
 function endCall(callId, reason) {
   const call = activeCalls.get(callId);
   if (!call) return;
@@ -806,7 +806,7 @@ function endCall(callId, reason) {
     receiverSocket.emit('call_ended', { callId, reason, duration });
   }
   
-  // Clean up
+  // Clean up - FIXED: Remove both users from userCalls
   activeCalls.delete(callId);
   userCalls.delete(call.caller);
   userCalls.delete(call.receiver);
@@ -1196,7 +1196,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Voice calling handlers
+  // FIXED Voice calling handlers
   socket.on('initiate_call', async (data) => {
     try {
       if (!socket.userId) return;
@@ -1235,7 +1235,7 @@ io.on('connection', (socket) => {
         return;
       }
       
-      // Check if either user is already in a call
+      // FIXED: Check if either user is already in a call
       if (userCalls.has(callerId) || userCalls.has(friendId)) {
         socket.emit('call_error', 'User is already in a call');
         return;
@@ -1259,8 +1259,10 @@ io.on('connection', (socket) => {
       };
       
       activeCalls.set(callId, call);
+      
+      // FIXED: Only mark caller as in call during ringing phase
       userCalls.set(callerId, callId);
-      userCalls.set(friendId, callId);
+      // DON'T mark receiver until they accept: userCalls.set(friendId, callId);
       
       // Notify receiver
       const receiverSocket = getSocketByUserId(friendId);
@@ -1272,20 +1274,21 @@ io.on('connection', (socket) => {
           callerId
         });
       } else {
-        // Friend is offline
-        socket.emit('call_error', 'User is not online');
-        activeCalls.delete(callId);
+        // Friend is offline - cleanup caller
         userCalls.delete(callerId);
-        userCalls.delete(friendId);
+        activeCalls.delete(callId);
+        socket.emit('call_error', 'User is not online');
         return;
       }
       
       socket.emit('call_initiated', { callId, status: 'ringing' });
       
-      // Auto-cancel after 30 seconds if not answered
+      // FIXED: Auto-cancel after 30 seconds if not answered
       setTimeout(() => {
         const currentCall = activeCalls.get(callId);
         if (currentCall && currentCall.status === 'ringing') {
+          // Clean up caller from userCalls since receiver never accepted
+          userCalls.delete(callerId);
           endCall(callId, 'timeout');
         }
       }, 30000);
@@ -1311,9 +1314,14 @@ io.on('connection', (socket) => {
       if (accept) {
         // Double-check both users still have call time
         if (!(await canUserStartCall(call.caller)) || !(await canUserStartCall(call.receiver))) {
+          // Clean up caller from userCalls and end call
+          userCalls.delete(call.caller);
           endCall(callId, 'insufficient_time');
           return;
         }
+        
+        // FIXED: Now mark receiver as in call since they accepted
+        userCalls.set(call.receiver, callId);
         
         // Accept the call
         call.status = 'active';
@@ -1359,7 +1367,8 @@ io.on('connection', (socket) => {
         }, 1000); // Update every second
         
       } else {
-        // Decline the call
+        // FIXED: Decline the call - clean up caller
+        userCalls.delete(call.caller);
         endCall(callId, 'declined');
       }
       
@@ -1990,7 +1999,7 @@ io.on('connection', (socket) => {
     }
   });
   
-  // Updated settings handler with notifications support
+  // Updated settings handler with call permissions support
   socket.on('update_settings', async (data) => {
     try {
       if (!socket.userId) return;
@@ -2038,9 +2047,9 @@ io.on('connection', (socket) => {
   
   socket.on('logout', async () => {
     if (socket.userId) {
-      // End any active calls
-      if (userCalls.has(socket.userId)) {
-        const callId = userCalls.get(socket.userId);
+      // FIXED: End any active calls and clean up properly
+      const callId = userCalls.get(socket.userId);
+      if (callId) {
         const call = activeCalls.get(callId);
         if (call) {
           // Final time update before ending call
@@ -2069,9 +2078,9 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     if (socket.userId) {
-      // End any active calls
-      if (userCalls.has(socket.userId)) {
-        const callId = userCalls.get(socket.userId);
+      // FIXED: End any active calls and clean up properly
+      const callId = userCalls.get(socket.userId);
+      if (callId) {
         endCall(callId, 'disconnected');
       }
       
