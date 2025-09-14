@@ -1260,19 +1260,14 @@ io.on('connection', (socket) => {
       
       // Notify receiver
       const receiverSocket = getSocketByUserId(friendId);
+
+      const callerUser = await getUserById(callerId);
       if (receiverSocket) {
-        const callerUser = await getUserById(callerId);
         receiverSocket.emit('incoming_call', {
           callId,
           callerUsername: callerUser.username,
           callerId
         });
-      } else {
-        // Friend is offline - cleanup caller
-        userCalls.delete(callerId);
-        activeCalls.delete(callId);
-        socket.emit('call_error', 'User is not online');
-        return;
       }
       
       socket.emit('call_initiated', { callId, status: 'ringing' });
