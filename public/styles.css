@@ -87,7 +87,7 @@ body {
   line-height: 1.6;
   overflow: hidden;
   height: 100vh;
-  height: 100dvh; /* Use dynamic viewport height for better mobile support */
+  height: 100dvh;
   position: fixed;
   width: 100%;
 }
@@ -895,6 +895,160 @@ body {
   color: var(--primary-500);
 }
 
+/* ===== Usage Tracking Section ===== */
+.usage-tracking-section {
+  margin-bottom: var(--space-6);
+}
+
+.usage-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.usage-stat-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.usage-stat-card:hover {
+  background: var(--bg-accent);
+  border-color: var(--border-color-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.usage-stat-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.usage-stat-icon {
+  font-size: 1.25rem;
+}
+
+.usage-stat-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.usage-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.usage-stat-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.usage-progress {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.usage-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-500), var(--primary-600));
+  border-radius: var(--radius-full);
+  transition: width var(--transition-normal);
+}
+
+/* Usage Status Colors */
+.usage-stat-card.usage-normal .usage-progress-bar {
+  background: linear-gradient(90deg, var(--success-500), var(--success-600));
+}
+
+.usage-stat-card.usage-warning .usage-progress-bar {
+  background: linear-gradient(90deg, var(--warning-500), var(--warning-600));
+}
+
+.usage-stat-card.usage-warning .usage-stat-value {
+  color: var(--warning-500);
+}
+
+.usage-stat-card.usage-critical .usage-progress-bar {
+  background: linear-gradient(90deg, var(--danger-500), var(--danger-600));
+}
+
+.usage-stat-card.usage-critical .usage-stat-value {
+  color: var(--danger-500);
+}
+
+/* ===== Tier Info Blocks ===== */
+.tier-info-blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.tier-info-block {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  transition: all var(--transition-fast);
+}
+
+.tier-info-block:hover {
+  background: var(--bg-accent);
+  border-color: var(--border-color-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.tier-info-block h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--primary-500);
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tier-info-block ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tier-info-block li {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tier-info-block li:last-child {
+  border-bottom: none;
+}
+
+.tier-info-block li:before {
+  content: '•';
+  color: var(--primary-500);
+  font-weight: bold;
+  margin-right: var(--space-2);
+}
+
 /* ===== Layout ===== */
 
 /* Auto-login Indicator */
@@ -1009,7 +1163,7 @@ body {
 .settings-modal-content {
   max-width: 700px;
   width: 95%;
-  min-height: 600px; /* Fixed minimum height to prevent size changes */
+  min-height: 600px;
 }
 
 .modal-header {
@@ -1094,7 +1248,7 @@ body {
 }
 
 .settings-content {
-  min-height: 400px; /* Fixed minimum height to prevent content jumping */
+  min-height: 400px;
 }
 
 .settings-tab-content {
@@ -2310,7 +2464,15 @@ body {
   
   .settings-modal-content {
     max-width: 600px;
-    min-height: 550px; /* Slightly reduced for tablets */
+    min-height: 550px;
+  }
+  
+  .usage-stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+  
+  .tier-info-blocks {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2391,7 +2553,7 @@ body {
     flex-direction: column;
   }
   
-  /* Mobile Messages Container - This should shrink */
+  /* Mobile Messages Container */
   .messages-container {
     flex: 1;
     min-height: 0;
@@ -2400,7 +2562,7 @@ body {
     -webkit-overflow-scrolling: touch;
   }
   
-  /* Mobile Message Input Area - Fixed at bottom */
+  /* Mobile Message Input Area */
   .message-input-area {
     padding: var(--space-3) var(--space-4);
     padding-bottom: calc(var(--mobile-bottom-padding) + env(safe-area-inset-bottom, 0px));
@@ -2465,7 +2627,7 @@ body {
     max-width: none;
     max-height: calc(100vh - 1rem);
     max-height: calc(100dvh - 1rem);
-    min-height: 500px; /* Reduced for mobile */
+    min-height: 500px;
   }
   
   /* Settings tabs mobile adjustments */
@@ -2482,7 +2644,25 @@ body {
   }
   
   .settings-content {
-    min-height: 350px; /* Reduced for mobile */
+    min-height: 350px;
+  }
+  
+  /* Usage stats mobile */
+  .usage-stats-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  
+  .usage-stat-card {
+    padding: var(--space-3);
+  }
+  
+  .usage-stat-header {
+    gap: var(--space-2);
+  }
+  
+  .usage-stat-value {
+    font-size: 1.25rem;
   }
   
   /* About section mobile adjustments */
@@ -2493,6 +2673,15 @@ body {
   }
   
   .about-section-block {
+    padding: var(--space-3);
+  }
+  
+  .tier-info-blocks {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  
+  .tier-info-block {
     padding: var(--space-3);
   }
   
@@ -2558,11 +2747,11 @@ body {
   .settings-modal-content {
     margin: var(--space-1);
     padding: var(--space-4);
-    min-height: 450px; /* Further reduced for small screens */
+    min-height: 450px;
   }
   
   .settings-content {
-    min-height: 300px; /* Further reduced for small screens */
+    min-height: 300px;
   }
   
   .auth-modal {
@@ -2572,7 +2761,7 @@ body {
   /* Compact header */
   .app-header {
     padding: 0 var(--space-4);
-    height: 60px; /* Smaller header on small screens */
+    height: 60px;
   }
   
   :root {
@@ -2672,6 +2861,23 @@ body {
   .upload-option {
     padding: var(--space-2) var(--space-3);
     font-size: 0.8rem;
+  }
+  
+  /* Usage stats adjustments */
+  .usage-stats-grid {
+    gap: var(--space-2);
+  }
+  
+  .usage-stat-card {
+    padding: var(--space-2);
+  }
+  
+  .usage-stat-value {
+    font-size: 1.125rem;
+  }
+  
+  .usage-stat-subtitle {
+    font-size: 0.7rem;
   }
 }
 

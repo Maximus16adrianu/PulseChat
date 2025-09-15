@@ -29,6 +29,15 @@ const PulseChat = {
     // Upload menu state
     uploadMenuOpen: false,
     
+    // Daily usage tracking (reset daily)
+    dailyUsage: {
+        pictures: 0,
+        videos: 0,
+        documents: 0,
+        voice: 0,
+        lastReset: null
+    },
+    
     // Connection state tracking
     connectionState: {
         wasBackgrounded: false,
@@ -49,6 +58,7 @@ const PulseChat = {
         recordBtn: document.getElementById('recordBtn'),
         playbackBtn: document.getElementById('playbackBtn'),
         sendVoiceBtn: document.getElementById('sendVoiceBtn'),
+        voiceUsageInfo: document.getElementById('voiceUsageInfo'),
         
         // Upload Menu
         uploadToggleBtn: document.getElementById('uploadToggleBtn'),
@@ -59,6 +69,9 @@ const PulseChat = {
         // Character Counter
         charCount: document.getElementById('charCount'),
         maxChars: document.getElementById('maxChars'),
+        
+        // Usage Tracking
+        usageStatsGrid: document.getElementById('usageStatsGrid'),
         
         // Mobile Navigation
         mobileNavOverlay: document.getElementById('mobileNavOverlay'),
@@ -158,6 +171,252 @@ const PulseChat = {
     }
 };
 
+// ===== Tier Configuration =====
+const TIER_LIMITS = {
+    1: { // Free tier
+        pictures: 5,
+        videos: 5,
+        documents: 5,
+        voice: 10
+    },
+    2: { // €5/month tier
+        pictures: 15,
+        videos: 10,
+        documents: 25,
+        voice: 50
+    },
+    3: { // €10/month tier  
+        pictures: 30,
+        videos: 20,
+        documents: 50,
+        voice: 100
+    }
+};
+
+const TIER_BENEFITS = {
+    1: [
+        { text: 'Unlimited text messages', available: true },
+        { text: 'Friend system & blocking', available: true },
+        { text: '5 pictures per day', available: true },
+        { text: '5 videos per day', available: true },
+        { text: '5 documents per day', available: true },
+        { text: '10 voice messages per day', available: true }
+    ],
+    2: [
+        { text: 'Unlimited text messages', available: true },
+        { text: 'Friend system & blocking', available: true },
+        { text: '15 pictures per day', available: true },
+        { text: '10 videos per day', available: true },
+        { text: '25 documents per day', available: true },
+        { text: '50 voice messages per day', available: true }
+    ],
+    3: [
+        { text: 'Unlimited text messages', available: true },
+        { text: 'Friend system & blocking', available: true },
+        { text: '30 pictures per day', available: true },
+        { text: '20 videos per day', available: true },
+        { text: '50 documents per day', available: true },
+        { text: '100 voice messages per day', available: true }
+    ]
+};
+
+// ===== Usage Tracking Functions =====
+
+function initializeUsageTracking() {
+    const today = new Date().toDateString();
+    const stored = localStorage.getItem('pulsechat_usage');
+    
+    if (stored) {
+        try {
+            const data = JSON.parse(stored);
+            if (data.date === today) {
+                PulseChat.dailyUsage = { ...data.usage, lastReset: today };
+            } else {
+                resetDailyUsage();
+            }
+        } catch (e) {
+            resetDailyUsage();
+        }
+    } else {
+        resetDailyUsage();
+    }
+}
+
+function resetDailyUsage() {
+    const today = new Date().toDateString();
+    PulseChat.dailyUsage = {
+        pictures: 0,
+        videos: 0,
+        documents: 0,
+        voice: 0,
+        lastReset: today
+    };
+    saveUsageTracking();
+}
+
+function saveUsageTracking() {
+    try {
+        const data = {
+            date: new Date().toDateString(),
+            usage: {
+                pictures: PulseChat.dailyUsage.pictures,
+                videos: PulseChat.dailyUsage.videos,
+                documents: PulseChat.dailyUsage.documents,
+                voice: PulseChat.dailyUsage.voice
+            }
+        };
+        localStorage.setItem('pulsechat_usage', JSON.stringify(data));
+    } catch (e) {
+        console.warn('Could not save usage tracking:', e);
+    }
+}
+
+function incrementUsage(type) {
+    if (PulseChat.dailyUsage[type] !== undefined) {
+        PulseChat.dailyUsage[type]++;
+        saveUsageTracking();
+        updateUsageDisplay();
+    }
+}
+
+function getUserTierLimits() {
+    if (!PulseChat.currentUser) return TIER_LIMITS[1];
+    
+    const userRole = PulseChat.currentUser.role || 'user';
+    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+    
+    if (userRole === 'owner') {
+        // Owner has unlimited everything
+        return {
+            pictures: Infinity,
+            videos: Infinity,
+            documents: Infinity,
+            voice: Infinity
+        };
+    } else if (hasSpecialRole) {
+        // Admin/Developer get Tier 3 limits
+        return TIER_LIMITS[3];
+    } else {
+        // Regular user uses their tier
+        const userTier = PulseChat.currentUser.tier || 1;
+        return TIER_LIMITS[userTier] || TIER_LIMITS[1];
+    }
+}
+
+function getRemainingUploads(type) {
+    const limits = getUserTierLimits();
+    const used = PulseChat.dailyUsage[type] || 0;
+    const limit = limits[type];
+    
+    if (limit === Infinity) return Infinity;
+    return Math.max(0, limit - used);
+}
+
+function canUpload(type) {
+    return getRemainingUploads(type) > 0;
+}
+
+function updateUsageDisplay() {
+    const usageGrid = PulseChat.elements.usageStatsGrid;
+    if (!usageGrid || !PulseChat.currentUser) return;
+    
+    const limits = getUserTierLimits();
+    const isOwner = PulseChat.currentUser.role === 'owner';
+    
+    usageGrid.innerHTML = '';
+    
+    const mediaTypes = [
+        { key: 'pictures', label: 'Pictures', icon: '🖼️' },
+        { key: 'videos', label: 'Videos', icon: '🎥' },
+        { key: 'documents', label: 'Documents', icon: '📄' },
+        { key: 'voice', label: 'Voice Messages', icon: '🎤' }
+    ];
+    
+    mediaTypes.forEach(media => {
+        const usageCard = document.createElement('div');
+        usageCard.className = 'usage-stat-card';
+        
+        const used = PulseChat.dailyUsage[media.key] || 0;
+        const limit = limits[media.key];
+        const remaining = getRemainingUploads(media.key);
+        
+        let statusClass = 'usage-normal';
+        if (!isOwner && limit !== Infinity) {
+            const percentUsed = (used / limit) * 100;
+            if (percentUsed >= 90) {
+                statusClass = 'usage-critical';
+            } else if (percentUsed >= 70) {
+                statusClass = 'usage-warning';
+            }
+        }
+        
+        usageCard.className = `usage-stat-card ${statusClass}`;
+        
+        if (isOwner) {
+            setSafeHTML(usageCard, `
+                <div class="usage-stat-header">
+                    <span class="usage-stat-icon">{{ICON}}</span>
+                    <span class="usage-stat-label">{{LABEL}}</span>
+                </div>
+                <div class="usage-stat-value">Unlimited</div>
+                <div class="usage-stat-subtitle">Owner privileges</div>
+            `, {
+                '{{ICON}}': media.icon,
+                '{{LABEL}}': media.label
+            });
+        } else if (limit === Infinity) {
+            setSafeHTML(usageCard, `
+                <div class="usage-stat-header">
+                    <span class="usage-stat-icon">{{ICON}}</span>
+                    <span class="usage-stat-label">{{LABEL}}</span>
+                </div>
+                <div class="usage-stat-value">Unlimited</div>
+                <div class="usage-stat-subtitle">Special role</div>
+            `, {
+                '{{ICON}}': media.icon,
+                '{{LABEL}}': media.label
+            });
+        } else {
+            setSafeHTML(usageCard, `
+                <div class="usage-stat-header">
+                    <span class="usage-stat-icon">{{ICON}}</span>
+                    <span class="usage-stat-label">{{LABEL}}</span>
+                </div>
+                <div class="usage-stat-value">{{REMAINING}} left</div>
+                <div class="usage-stat-subtitle">{{USED}} / {{LIMIT}} used today</div>
+                <div class="usage-progress">
+                    <div class="usage-progress-bar" style="width: {{PERCENT}}%"></div>
+                </div>
+            `, {
+                '{{ICON}}': media.icon,
+                '{{LABEL}}': media.label,
+                '{{REMAINING}}': remaining,
+                '{{USED}}': used,
+                '{{LIMIT}}': limit,
+                '{{PERCENT}}': Math.min((used / limit) * 100, 100)
+            });
+        }
+        
+        usageGrid.appendChild(usageCard);
+    });
+}
+
+function updateVoiceUsageInfo() {
+    const voiceUsageInfo = PulseChat.elements.voiceUsageInfo;
+    if (!voiceUsageInfo || !PulseChat.currentUser) return;
+    
+    const remaining = getRemainingUploads('voice');
+    const isOwner = PulseChat.currentUser.role === 'owner';
+    
+    if (isOwner) {
+        setSafeTextContent(voiceUsageInfo, 'Voice messages remaining today: Unlimited (Owner)');
+    } else if (remaining === Infinity) {
+        setSafeTextContent(voiceUsageInfo, 'Voice messages remaining today: Unlimited (Special role)');
+    } else {
+        setSafeTextContent(voiceUsageInfo, `Voice messages remaining today: ${remaining}`);
+    }
+}
+
 // ===== Voice Recording Functions =====
 
 async function initializeVoiceRecording() {
@@ -194,7 +453,13 @@ function startVoiceRecording() {
         return;
     }
     
+    if (!canUpload('voice')) {
+        showNotification('Daily voice message limit reached', 'error');
+        return;
+    }
+    
     showModal(PulseChat.elements.voiceRecordingModal);
+    updateVoiceUsageInfo();
     initializeVoiceRecording();
 }
 
@@ -313,9 +578,12 @@ function playRecording() {
 async function sendVoiceMessage() {
     if (!PulseChat.voiceRecording.recordedBlob || !PulseChat.selectedFriend) return;
     
+    if (!canUpload('voice')) {
+        showNotification('Daily voice message limit reached', 'error');
+        return;
+    }
+    
     try {
-        // Convert webm to mp3 (in a real app, you'd use a proper audio conversion library)
-        // For now, we'll send the webm and let the server handle conversion or validation
         const formData = new FormData();
         formData.append('file', PulseChat.voiceRecording.recordedBlob, 'voice_message.webm');
         formData.append('userId', PulseChat.currentUser.id);
@@ -331,6 +599,7 @@ async function sendVoiceMessage() {
         if (result.error) {
             showNotification(result.error, 'error');
         } else {
+            incrementUsage('voice');
             showNotification('Voice message sent!', 'success');
             cancelVoiceRecording();
         }
@@ -418,6 +687,11 @@ function triggerImageUpload() {
 }
 
 function triggerDocumentUpload() {
+    if (!canUpload('documents')) {
+        showNotification('Daily document limit reached', 'error');
+        return;
+    }
+    
     PulseChat.elements.documentInput.click();
     PulseChat.elements.uploadMenu.classList.add('hidden');
     PulseChat.uploadMenuOpen = false;
@@ -443,6 +717,15 @@ async function uploadImageVideo() {
         return;
     }
     
+    // Check usage limits
+    const uploadType = isVideo ? 'videos' : 'pictures';
+    if (!canUpload(uploadType)) {
+        const remaining = getRemainingUploads(uploadType);
+        showNotification(`Daily ${isVideo ? 'video' : 'image'} limit reached (${remaining} remaining)`, 'error');
+        fileInput.value = '';
+        return;
+    }
+    
     // Additional file validation for security
     const maxFileSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxFileSize) {
@@ -451,23 +734,10 @@ async function uploadImageVideo() {
         return;
     }
     
-    const userTier = PulseChat.currentUser.tier || 1;
-    const userRole = PulseChat.currentUser.role || 'user';
-    const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
-    
-    if (isVideo && userTier < 3 && !hasSpecialRole) {
-        showNotification('You need Tier 3 to upload videos', 'error');
-        fileInput.value = '';
-        return;
+    const success = await uploadFile(file);
+    if (success) {
+        incrementUsage(uploadType);
     }
-    
-    if (isImage && userTier < 2 && !hasSpecialRole) {
-        showNotification('You need Tier 2 to upload images', 'error');
-        fileInput.value = '';
-        return;
-    }
-    
-    await uploadFile(file);
     fileInput.value = '';
 }
 
@@ -478,6 +748,14 @@ async function uploadDocument() {
     const file = fileInput.files[0];
     
     if (!file) return;
+    
+    // Check usage limits
+    if (!canUpload('documents')) {
+        const remaining = getRemainingUploads('documents');
+        showNotification(`Daily document limit reached (${remaining} remaining)`, 'error');
+        fileInput.value = '';
+        return;
+    }
     
     // Check file type
     if (!file.type === 'text/plain' && !file.name.endsWith('.txt')) {
@@ -494,7 +772,10 @@ async function uploadDocument() {
         return;
     }
     
-    await uploadFile(file);
+    const success = await uploadFile(file);
+    if (success) {
+        incrementUsage('documents');
+    }
     fileInput.value = '';
 }
 
@@ -514,13 +795,16 @@ async function uploadFile(file) {
         
         if (result.error) {
             showNotification(result.error, 'error');
+            return false;
         } else {
             showNotification('File uploaded successfully!', 'success');
+            return true;
         }
         
     } catch (error) {
         console.error('Upload error:', error);
         showNotification('Upload failed', 'error');
+        return false;
     }
 }
 
@@ -1087,16 +1371,11 @@ function setupSocketHandlers() {
         hideReconnectOverlay();
         PulseChat.elements.mainApp.classList.remove('hidden');
         
-        // Update user info display safely
-        setSafeTextContent(PulseChat.elements.currentUsername, PulseChat.currentUser.username);
+        // Initialize usage tracking
+        initializeUsageTracking();
         
-        // Show role badge if applicable
-        if (['admin', 'owner', 'developer'].includes(PulseChat.currentUser.role)) {
-            const roleBadge = PulseChat.elements.userRole;
-            setSafeTextContent(roleBadge, PulseChat.currentUser.role);
-            roleBadge.className = `role-badge ${escapeHtml(PulseChat.currentUser.role)}`;
-            roleBadge.classList.remove('hidden');
-        }
+        // Update user info display safely (without role badge in header)
+        setSafeTextContent(PulseChat.elements.currentUsername, PulseChat.currentUser.username);
         
         // Update profile tab if it's visible
         if (PulseChat.currentSettingsTab === 'profile') {
@@ -1335,34 +1614,6 @@ function setupSocketHandlers() {
     });
 }
 
-// ===== Tier Benefits Configuration =====
-const TIER_BENEFITS = {
-    1: [
-        { text: 'Basic messaging', available: true },
-        { text: 'Friend system', available: true },
-        { text: 'Document sharing', available: true },
-        { text: 'Voice messages', available: true },
-        { text: 'Image uploads', available: false },
-        { text: 'Video uploads', available: false }
-    ],
-    2: [
-        { text: 'Basic messaging', available: true },
-        { text: 'Friend system', available: true },
-        { text: 'Document sharing', available: true },
-        { text: 'Voice messages', available: true },
-        { text: 'Image uploads', available: true },
-        { text: 'Video uploads', available: false }
-    ],
-    3: [
-        { text: 'Basic messaging', available: true },
-        { text: 'Friend system', available: true },
-        { text: 'Document sharing', available: true },
-        { text: 'Voice messages', available: true },
-        { text: 'Image uploads', available: true },
-        { text: 'Video uploads', available: true }
-    ]
-};
-
 // ===== Settings Functions =====
 
 function switchSettingsTab(tabName) {
@@ -1396,6 +1647,7 @@ function switchSettingsTab(tabName) {
     // Update profile tab content if it's the active tab
     if (tabName === 'profile' && PulseChat.currentUser) {
         updateProfileTab();
+        updateUsageDisplay();
     }
 }
 
@@ -1423,6 +1675,9 @@ function updateProfileTab() {
     
     // Update tier benefits
     updateTierBenefits();
+    
+    // Update usage display
+    updateUsageDisplay();
 }
 
 function updateTierBenefits() {
@@ -1434,6 +1689,7 @@ function updateTierBenefits() {
     
     // Special role privileges
     const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+    const isOwner = userRole === 'owner';
     
     PulseChat.elements.tierBenefitsList.innerHTML = '';
     
@@ -1464,13 +1720,15 @@ function updateTierBenefits() {
         const specialDiv = document.createElement('div');
         specialDiv.className = 'benefit-item available';
         
+        let specialText = isOwner ? 'Unlimited uploads (Owner privileges)' : `All Tier 3 features (${userRole} privileges)`;
+        
         setSafeHTML(specialDiv, `
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"></polygon>
             </svg>
-            <span>All features unlocked ({{USER_ROLE}} privileges)</span>
+            <span>{{SPECIAL_TEXT}}</span>
         `, {
-            '{{USER_ROLE}}': userRole
+            '{{SPECIAL_TEXT}}': specialText
         });
         
         PulseChat.elements.tierBenefitsList.appendChild(specialDiv);
@@ -1759,6 +2017,16 @@ function register() {
     .catch(err => {
         showMessage('regMessage', 'Registration failed', 'error');
     });
+}
+
+// Updated logout function with confirmation dialog
+function confirmLogout() {
+    // Create a confirmation dialog
+    const confirmed = confirm('Are you sure you want to logout?');
+    
+    if (confirmed) {
+        logout();
+    }
 }
 
 function logout() {
@@ -2499,6 +2767,9 @@ window.addEventListener('resize', function() {
 // ===== Initialization =====
 
 window.addEventListener('load', () => {
+    // Initialize usage tracking first
+    initializeUsageTracking();
+    
     // Create notification sound
     createNotificationSound();
     
@@ -2515,6 +2786,7 @@ window.addEventListener('load', () => {
 window.login = login;
 window.register = register;
 window.logout = logout;
+window.confirmLogout = confirmLogout; // New logout confirmation function
 window.showLogin = showLogin;
 window.showRegister = showRegister;
 window.showFriendsManagement = showFriendsManagement;

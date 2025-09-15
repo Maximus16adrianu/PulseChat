@@ -212,7 +212,7 @@
                 
                 <div class="recording-info">
                     <p>Maximum recording time: 1 minute</p>
-                    <p>Daily limit: 10 voice messages</p>
+                    <p id="voiceUsageInfo">Voice messages remaining today: --</p>
                 </div>
             </div>
         </div>
@@ -397,6 +397,14 @@
                             </div>
                         </div>
                         
+                        <!-- Daily Usage Section -->
+                        <div class="usage-tracking-section">
+                            <h4 class="settings-section-title">Today's Usage</h4>
+                            <div class="usage-stats-grid" id="usageStatsGrid">
+                                <!-- Usage stats will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
                         <div class="tier-benefits">
                             <h4 class="tier-benefits-title">Your Tier Benefits</h4>
                             <div class="tier-benefits-list" id="tierBenefitsList">
@@ -446,18 +454,56 @@
                                     <div class="pulse-icon"></div>
                                     <h4>PulseChat</h4>
                                 </div>
-                                <span class="version-badge">v1.1.0</span>
+                                <span class="version-badge">v1.2.0</span>
                             </div>
                             
                             <div class="about-content">
                                 <div class="about-section-block">
+                                    <h5>Tier System</h5>
+                                    <div class="tier-info-blocks">
+                                        <div class="tier-info-block">
+                                            <h6>Tier 1 - Free</h6>
+                                            <ul>
+                                                <li><strong>Text messages:</strong> Unlimited</li>
+                                                <li><strong>Pictures:</strong> 5 per day</li>
+                                                <li><strong>Videos:</strong> 5 per day</li>
+                                                <li><strong>Documents:</strong> 5 per day</li>
+                                                <li><strong>Voice messages:</strong> 10 per day</li>
+                                            </ul>
+                                        </div>
+                                        <div class="tier-info-block">
+                                            <h6>Tier 2 - €5/month</h6>
+                                            <ul>
+                                                <li><strong>Text messages:</strong> Unlimited</li>
+                                                <li><strong>Pictures:</strong> 15 per day</li>
+                                                <li><strong>Videos:</strong> 10 per day</li>
+                                                <li><strong>Documents:</strong> 25 per day</li>
+                                                <li><strong>Voice messages:</strong> 50 per day</li>
+                                            </ul>
+                                        </div>
+                                        <div class="tier-info-block">
+                                            <h6>Tier 3 - €10/month</h6>
+                                            <ul>
+                                                <li><strong>Text messages:</strong> Unlimited</li>
+                                                <li><strong>Pictures:</strong> 30 per day</li>
+                                                <li><strong>Videos:</strong> 20 per day</li>
+                                                <li><strong>Documents:</strong> 50 per day</li>
+                                                <li><strong>Voice messages:</strong> 100 per day</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <p><em>Admin, Developer, and Owner roles have Tier 3 privileges. Owner role has unlimited uploads.</em></p>
+                                </div>
+                                
+                                <div class="about-section-block">
                                     <h5>Features</h5>
                                     <ul>
-                                        <li><strong>Text Messages:</strong> Real-time messaging with friends</li>
-                                        <li><strong>Media Sharing:</strong> Share images and videos (tier-based)</li>
-                                        <li><strong>Voice Messages:</strong> Record and send voice messages up to 1 minute</li>
-                                        <li><strong>Document Sharing:</strong> Share text documents up to 50KB</li>
-                                        <li><strong>Friend System:</strong> Add friends and manage your social network</li>
+                                        <li><strong>Real-time messaging:</strong> Instant text communication with friends</li>
+                                        <li><strong>Media sharing:</strong> Share images and videos (tier-based limits)</li>
+                                        <li><strong>Voice messages:</strong> Record and send voice messages up to 1 minute</li>
+                                        <li><strong>Document sharing:</strong> Share text documents up to 50KB</li>
+                                        <li><strong>Friend system:</strong> Add friends and manage your social network</li>
+                                        <li><strong>Privacy controls:</strong> Block users and manage friend requests</li>
                                     </ul>
                                 </div>
                                 
@@ -623,7 +669,6 @@
                 <div class="header-right">
                     <div class="user-info">
                         <span id="currentUsername" class="username"></span>
-                        <span id="userRole" class="role-badge hidden"></span>
                     </div>
                     <div class="header-actions">
                         <button class="btn btn-icon" onclick="showSettings()" title="Settings">
@@ -632,7 +677,7 @@
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                             </svg>
                         </button>
-                        <button class="btn btn-icon btn-danger" onclick="logout()" title="Logout">
+                        <button class="btn btn-icon btn-danger" onclick="confirmLogout()" title="Logout">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                                 <polyline points="16,17 21,12 16,7"></polyline>

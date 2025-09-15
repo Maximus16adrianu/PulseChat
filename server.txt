@@ -1,3 +1,0 @@
-git reset --hard origin/main
-git fetch origin
-pm2 restart all

@@ -23,11 +23,32 @@ const WARNING_RESET_TIME = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGE_LENGTH = 250; // Maximum message length in characters
 const MESSAGE_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
 const MAX_MESSAGES_PER_CHAT = 250; // Maximum messages to keep per chat
-const DOCUMENT_UPLOAD_COOLDOWN = 5 * 60 * 1000; // 5 minutes between document uploads
+const FILE_UPLOAD_COOLDOWN = 60 * 1000; // 1 minute for pictures, videos, documents
+const VOICE_MESSAGE_COOLDOWN = 2 * 1000; // 2 seconds for voice messages
 const MAX_DOCUMENT_SIZE = 50 * 1024; // 50KB
 const MAX_VOICE_SIZE = 2 * 1024 * 1024; // 2MB
-const DAILY_DOCUMENT_LIMIT = 10; // 10 documents per day
-const DAILY_VOICE_LIMIT = 10; // 10 voice messages per day
+
+// Daily limits per tier
+const TIER_LIMITS = {
+  1: { // Free tier
+    pictures: 5,
+    videos: 5,
+    documents: 5,
+    voice: 10
+  },
+  2: { // €5/month tier
+    pictures: 15,
+    videos: 10,
+    documents: 25,
+    voice: 50
+  },
+  3: { // €10/month tier  
+    pictures: 30,
+    videos: 20,
+    documents: 50,
+    voice: 100
+  }
+};
 
 // Middleware
 app.use(express.json());
@@ -52,16 +73,85 @@ const apiLimiter = rateLimit({
 app.use('/api/register', loginLimiter);
 app.use('/api/', apiLimiter);
 
-// In-memory storage for active users and rate limiting
+// In-memory storage for active users and message rate limiting
 const activeUsers = new Map();
 const messageLimits = new Map();
-const uploadLimits = new Map();
-const documentLimits = new Map();
-const voiceLimits = new Map();
 const friendRequestCooldowns = new Map();
 
 // Message cache to prevent ghost messages
 const messageCache = new Map(); // chatId -> messages array
+
+// Upload tracking - now persistent
+let uploadTracking = {
+  lastReset: getCurrentDateString(),
+  users: {}
+};
+
+// Helper function to get current date as string (YYYY-MM-DD)
+function getCurrentDateString() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// Load upload tracking from file
+async function loadUploadTracking() {
+  try {
+    const data = await fs.readFile('private/cooldowns/upload_tracking.json', 'utf8');
+    uploadTracking = JSON.parse(data);
+    
+    // Check if we need to reset daily limits
+    await checkAndResetDailyLimits();
+  } catch (error) {
+    // File doesn't exist, use default structure
+    uploadTracking = {
+      lastReset: getCurrentDateString(),
+      users: {}
+    };
+    await saveUploadTracking();
+  }
+}
+
+// Save upload tracking to file
+async function saveUploadTracking() {
+  try {
+    await fs.writeFile('private/cooldowns/upload_tracking.json', JSON.stringify(uploadTracking, null, 2));
+  } catch (error) {
+    console.error('Error saving upload tracking:', error);
+  }
+}
+
+// Check if it's a new day and reset daily limits
+async function checkAndResetDailyLimits() {
+  const currentDate = getCurrentDateString();
+  
+  if (uploadTracking.lastReset !== currentDate) {
+    console.log(`Resetting daily upload limits (last reset: ${uploadTracking.lastReset}, current: ${currentDate})`);
+    
+    // Reset all user daily upload counts
+    for (const userId in uploadTracking.users) {
+      const user = uploadTracking.users[userId];
+      if (user.pictures) user.pictures.dailyUploads = [];
+      if (user.videos) user.videos.dailyUploads = [];
+      if (user.documents) user.documents.dailyUploads = [];
+      if (user.voice) user.voice.dailyUploads = [];
+    }
+    
+    uploadTracking.lastReset = currentDate;
+    await saveUploadTracking();
+  }
+}
+
+// Get or create user upload tracking
+function getUserUploadData(userId) {
+  if (!uploadTracking.users[userId]) {
+    uploadTracking.users[userId] = {
+      pictures: { dailyUploads: [], lastUpload: 0 },
+      videos: { dailyUploads: [], lastUpload: 0 },
+      documents: { dailyUploads: [], lastUpload: 0 },
+      voice: { dailyUploads: [], lastUpload: 0 }
+    };
+  }
+  return uploadTracking.users[userId];
+}
 
 // Ensure directories exist
 async function initializeDirectories() {
@@ -71,7 +161,8 @@ async function initializeDirectories() {
     'private/users',
     'private/friends',
     'private/logins',
-    'private/mutes'
+    'private/mutes',
+    'private/cooldowns'
   ];
   
   for (const dir of dirs) {
@@ -100,6 +191,9 @@ async function initializeDirectories() {
       await fs.writeFile(file, JSON.stringify([], null, 2));
     }
   }
+  
+  // Load upload tracking
+  await loadUploadTracking();
 }
 
 // File upload configuration - Using memory storage first for validation
@@ -942,88 +1036,157 @@ function checkMessageLimit(userId) {
   return { allowed: true };
 }
 
-function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
-  // Owner has no upload limits
+// Updated upload limit functions with persistent storage and 1-minute cooldowns
+async function checkPictureLimit(userId, userRole) {
+  // Owner has no limits
   if (userRole === 'owner') {
     return { allowed: true };
   }
   
+  // Check for daily reset
+  await checkAndResetDailyLimits();
+  
   const now = Date.now();
-  if (!uploadLimits.has(userId)) {
-    uploadLimits.set(userId, { uploads: [], dailyUploads: [] });
+  const userData = getUserUploadData(userId);
+  
+  // Check 1-minute cooldown
+  if (now - userData.pictures.lastUpload < FILE_UPLOAD_COOLDOWN) {
+    const secondsLeft = Math.ceil((FILE_UPLOAD_COOLDOWN - (now - userData.pictures.lastUpload)) / 1000);
+    return { allowed: false, reason: `Please wait ${secondsLeft} seconds before uploading another picture` };
   }
   
-  const userLimits = uploadLimits.get(userId);
+  // Clean old uploads (24 hours)
+  userData.pictures.dailyUploads = userData.pictures.dailyUploads.filter(time => now - time < 86400000);
   
-  // Clean old uploads
-  userLimits.uploads = userLimits.uploads.filter(time => now - time < 60000); // 1 minute
-  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
+  // Get user and determine tier
+  const user = await getUserById(userId);
+  const tier = user ? getUserTier(user) : 1;
+  const limit = TIER_LIMITS[tier].pictures;
   
-  // Check daily limit (5 per day)
-  if (userLimits.dailyUploads.length >= 5) {
-    return { allowed: false, reason: 'Daily upload limit reached (5 files per day)' };
+  // Check daily limit
+  if (userData.pictures.dailyUploads.length >= limit) {
+    return { allowed: false, reason: `Daily picture limit reached (${limit} pictures per day)` };
   }
   
-  // Check 30-minute limit (3 files)
-  const recent30min = userLimits.uploads.filter(time => now - time < 1800000);
-  if (recent30min.length >= 3) {
-    return { allowed: false, reason: 'Upload limit reached (3 files per 30 minutes)' };
-  }
-  
-  // Check 1-minute limit (1 file)
-  if (userLimits.uploads.length >= 1) {
-    return { allowed: false, reason: 'Please wait 1 minute between uploads' };
-  }
-  
-  userLimits.uploads.push(now);
-  userLimits.dailyUploads.push(now);
+  userData.pictures.dailyUploads.push(now);
+  userData.pictures.lastUpload = now;
+  await saveUploadTracking();
   return { allowed: true };
 }
 
-function checkDocumentLimit(userId) {
+async function checkVideoLimit(userId, userRole) {
+  // Owner has no limits
+  if (userRole === 'owner') {
+    return { allowed: true };
+  }
+  
+  // Check for daily reset
+  await checkAndResetDailyLimits();
+  
   const now = Date.now();
-  if (!documentLimits.has(userId)) {
-    documentLimits.set(userId, { uploads: [], dailyUploads: [] });
+  const userData = getUserUploadData(userId);
+  
+  // Check 1-minute cooldown
+  if (now - userData.videos.lastUpload < FILE_UPLOAD_COOLDOWN) {
+    const secondsLeft = Math.ceil((FILE_UPLOAD_COOLDOWN - (now - userData.videos.lastUpload)) / 1000);
+    return { allowed: false, reason: `Please wait ${secondsLeft} seconds before uploading another video` };
   }
   
-  const userLimits = documentLimits.get(userId);
+  // Clean old uploads (24 hours)
+  userData.videos.dailyUploads = userData.videos.dailyUploads.filter(time => now - time < 86400000);
   
-  // Clean old uploads (5 minutes between document uploads)
-  userLimits.uploads = userLimits.uploads.filter(time => now - time < DOCUMENT_UPLOAD_COOLDOWN);
-  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
+  // Get user and determine tier
+  const user = await getUserById(userId);
+  const tier = user ? getUserTier(user) : 1;
+  const limit = TIER_LIMITS[tier].videos;
   
-  // Check daily limit (10 per day)
-  if (userLimits.dailyUploads.length >= DAILY_DOCUMENT_LIMIT) {
-    return { allowed: false, reason: 'Daily document limit reached (10 documents per day)' };
+  // Check daily limit
+  if (userData.videos.dailyUploads.length >= limit) {
+    return { allowed: false, reason: `Daily video limit reached (${limit} videos per day)` };
   }
   
-  // Check 5-minute cooldown
-  if (userLimits.uploads.length >= 1) {
-    return { allowed: false, reason: 'Please wait 5 minutes between document uploads' };
-  }
-  
-  userLimits.uploads.push(now);
-  userLimits.dailyUploads.push(now);
+  userData.videos.dailyUploads.push(now);
+  userData.videos.lastUpload = now;
+  await saveUploadTracking();
   return { allowed: true };
 }
 
-function checkVoiceLimit(userId) {
+async function checkDocumentLimit(userId, userRole) {
+  // Owner has no limits
+  if (userRole === 'owner') {
+    return { allowed: true };
+  }
+  
+  // Check for daily reset
+  await checkAndResetDailyLimits();
+  
   const now = Date.now();
-  if (!voiceLimits.has(userId)) {
-    voiceLimits.set(userId, { dailyUploads: [] });
+  const userData = getUserUploadData(userId);
+  
+  // Check 1-minute cooldown
+  if (now - userData.documents.lastUpload < FILE_UPLOAD_COOLDOWN) {
+    const secondsLeft = Math.ceil((FILE_UPLOAD_COOLDOWN - (now - userData.documents.lastUpload)) / 1000);
+    return { allowed: false, reason: `Please wait ${secondsLeft} seconds before uploading another document` };
   }
   
-  const userLimits = voiceLimits.get(userId);
+  // Clean old uploads (24 hours)
+  userData.documents.dailyUploads = userData.documents.dailyUploads.filter(time => now - time < 86400000);
   
-  // Clean old uploads
-  userLimits.dailyUploads = userLimits.dailyUploads.filter(time => now - time < 86400000); // 24 hours
+  // Get user and determine tier
+  const user = await getUserById(userId);
+  const tier = user ? getUserTier(user) : 1;
+  const limit = TIER_LIMITS[tier].documents;
   
-  // Check daily limit (10 per day)
-  if (userLimits.dailyUploads.length >= DAILY_VOICE_LIMIT) {
-    return { allowed: false, reason: 'Daily voice message limit reached (10 voice messages per day)' };
+  // Check daily limit
+  if (userData.documents.dailyUploads.length >= limit) {
+    return { allowed: false, reason: `Daily document limit reached (${limit} documents per day)` };
   }
   
-  userLimits.dailyUploads.push(now);
+  userData.documents.dailyUploads.push(now);
+  userData.documents.lastUpload = now;
+  await saveUploadTracking();
+  return { allowed: true };
+}
+
+async function checkVoiceLimit(userId, userRole) {
+  // Owner has no limits
+  if (userRole === 'owner') {
+    return { allowed: true };
+  }
+  
+  // Check for daily reset
+  await checkAndResetDailyLimits();
+  
+  const now = Date.now();
+  const userData = getUserUploadData(userId);
+  
+  // Check 2-second cooldown (same as messages for spam prevention)
+  if (now - userData.voice.lastUpload < VOICE_MESSAGE_COOLDOWN) {
+    return { allowed: false, reason: 'Please wait 2 seconds between voice messages' };
+  }
+  
+  // Clean old uploads (24 hours)
+  userData.voice.dailyUploads = userData.voice.dailyUploads.filter(time => now - time < 86400000);
+  
+  // Get user and determine tier
+  const user = await getUserById(userId);
+  const tier = user ? getUserTier(user) : 1;
+  const limit = TIER_LIMITS[tier].voice;
+  
+  // Check daily limit
+  if (userData.voice.dailyUploads.length >= limit) {
+    return { allowed: false, reason: `Daily voice message limit reached (${limit} voice messages per day)` };
+  }
+  
+  userData.voice.dailyUploads.push(now);
+  userData.voice.lastUpload = now;
+  await saveUploadTracking();
+  return { allowed: true };
+}
+
+function checkUploadLimit(userId, isVideo = false, userRole = 'user') {
+  // This function is no longer used as we have specific limits for each media type
+  // Keeping it for compatibility, but it always returns allowed
   return { allowed: true };
 }
 
@@ -1789,7 +1952,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Enhanced upload endpoint that handles documents and voice messages with new structure
+// Enhanced upload endpoint that handles documents and voice messages with new persistent limits
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   let savedFilePath = null;
   
@@ -1824,17 +1987,6 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       return res.status(403).json({ error: 'You are currently muted' });
     }
     
-    // Tier restrictions only apply to images and videos
-    if (user.role !== 'owner') {
-      if ((isImage || isVideo) && userTier < 2) {
-        return res.status(403).json({ error: 'Insufficient tier for file uploads (Need Tier 2+)' });
-      }
-      
-      if (isVideo && userTier < 3) {
-        return res.status(403).json({ error: 'Insufficient tier for video uploads (Need Tier 3)' });
-      }
-    }
-    
     // File size checks
     if (isDocument && req.file.size > MAX_DOCUMENT_SIZE) {
       return res.status(413).json({ error: `Document too large (${Math.round(req.file.size/1024)}KB / 50KB max)` });
@@ -1851,16 +2003,19 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       }
     }
     
-    // Check upload limits
+    // Check tier-based upload limits with new persistent system
     let limitCheck;
     
-    if (isDocument) {
-      limitCheck = checkDocumentLimit(userId);
+    if (isImage) {
+      limitCheck = await checkPictureLimit(userId, user.role);
+    } else if (isVideo) {
+      limitCheck = await checkVideoLimit(userId, user.role);
+    } else if (isDocument) {
+      limitCheck = await checkDocumentLimit(userId, user.role);
     } else if (isAudio) {
-      limitCheck = checkVoiceLimit(userId);
+      limitCheck = await checkVoiceLimit(userId, user.role);
     } else {
-      // Images and videos use the existing upload limit system
-      limitCheck = checkUploadLimit(userId, isVideo, user.role);
+      return res.status(400).json({ error: 'Unknown file type' });
     }
     
     if (!limitCheck.allowed) {
@@ -2195,9 +2350,17 @@ app.post('/api/admin/users/:userId/unmute', async (req, res) => {
   }
 });
 
+// Fixed backup endpoint with proper error handling
 app.get('/api/admin/backup', async (req, res) => {
   try {
     const archiveName = `pulsechat-backup-${new Date().toISOString().split('T')[0]}.zip`;
+    
+    // Check if private directory exists
+    try {
+      await fs.access(path.join(__dirname, 'private'));
+    } catch (error) {
+      return res.status(404).json({ error: 'No data to backup' });
+    }
     
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${archiveName}"`);
@@ -2206,23 +2369,28 @@ app.get('/api/admin/backup', async (req, res) => {
       zlib: { level: 9 } // Maximum compression
     });
     
+    // Handle archive errors before piping
     archive.on('error', (err) => {
       console.error('Archive error:', err);
-      res.status(500).json({ error: 'Failed to create backup' });
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to create backup' });
+      }
     });
     
     // Pipe archive data to the response
     archive.pipe(res);
     
     // Add the entire private directory to the archive
-    archive.directory('private/', false);
+    archive.directory(path.join(__dirname, 'private'), false);
     
     // Finalize the archive
     await archive.finalize();
     
   } catch (error) {
     console.error('Backup error:', error);
-    res.status(500).json({ error: 'Failed to create backup' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to create backup' });
+    }
   }
 });
 
@@ -2386,6 +2554,7 @@ setInterval(async () => {
   await cleanupExpiredMutes();
   await cleanupOldMessages();  // Clean up old messages
   await cleanupOrphanedMediaFiles();  // Clean up orphaned files
+  await checkAndResetDailyLimits(); // Check for daily limit resets
 }, 30 * 60 * 1000); // Run every 30 minutes
 
 // Initialize and start server
@@ -2398,14 +2567,20 @@ async function start() {
     console.log(`Max active users: ${MAX_ACTIVE_USERS}`);
     console.log(`Message retention: 48 hours`);
     console.log(`Max messages per chat: ${MAX_MESSAGES_PER_CHAT}`);
-    console.log(`Document upload cooldown: 5 minutes`);
+    console.log(`File upload cooldown: 1 minute (pictures, videos, documents)`);
+    console.log(`Voice message cooldown: 2 seconds`);
     console.log(`Max document size: 50KB`);
     console.log(`Max voice message size: 2MB`);
-    console.log(`Daily document limit: ${DAILY_DOCUMENT_LIMIT}`);
-    console.log(`Daily voice message limit: ${DAILY_VOICE_LIMIT}`);
+    console.log(`Tier limits:`);
+    console.log(`  Tier 1 (Free): ${TIER_LIMITS[1].pictures} pics, ${TIER_LIMITS[1].videos} videos, ${TIER_LIMITS[1].documents} docs, ${TIER_LIMITS[1].voice} voice/day`);
+    console.log(`  Tier 2 (€5): ${TIER_LIMITS[2].pictures} pics, ${TIER_LIMITS[2].videos} videos, ${TIER_LIMITS[2].documents} docs, ${TIER_LIMITS[2].voice} voice/day`);
+    console.log(`  Tier 3 (€10): ${TIER_LIMITS[3].pictures} pics, ${TIER_LIMITS[3].videos} videos, ${TIER_LIMITS[3].documents} docs, ${TIER_LIMITS[3].voice} voice/day`);
     console.log(`Audio format: WebM only`);
     console.log(`Ghost message prevention: ENABLED`);
     console.log(`File structure: Chat-centric organization`);
+    console.log(`Upload tracking: Persistent (private/cooldowns/upload_tracking.json)`);
+    console.log(`Daily reset: Automatic at midnight`);
+    console.log(`Admin/Developer/Owner roles: Tier 3 privileges`);
   });
 }
 

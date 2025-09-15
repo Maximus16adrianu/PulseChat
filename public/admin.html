@@ -346,19 +346,32 @@
         .tier-description {
             font-size: 0.9em;
             color: #bbb;
+            margin-top: 10px;
         }
 
         .tier-list {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 15px;
-            flex-wrap: wrap;
+            margin-top: 15px;
         }
 
         .tier-item {
             background-color: #2d2d2d;
-            padding: 10px 15px;
+            padding: 15px;
             border-radius: 5px;
             border: 1px solid #444;
+        }
+
+        .tier-item h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .tier-item .tier-details {
+            font-size: 0.9em;
+            color: #ccc;
+            line-height: 1.4;
         }
 
         .username-cell {
@@ -489,6 +502,10 @@
                 flex-direction: column;
                 align-items: stretch;
             }
+
+            .tier-list {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -522,17 +539,39 @@
                 <h3>📊 User Tier System</h3>
                 <div class="tier-list">
                     <div class="tier-item">
-                        <strong>Tier 1:</strong> Messages only
+                        <h4>Tier 1 - Free</h4>
+                        <div class="tier-details">
+                            • Text messages only<br>
+                            • 5 pictures per day<br>
+                            • 5 videos per day<br>
+                            • 5 documents per day<br>
+                            • 10 voice messages per day
+                        </div>
                     </div>
                     <div class="tier-item">
-                        <strong>Tier 2:</strong> Messages + Pictures
+                        <h4>Tier 2 - €5/month</h4>
+                        <div class="tier-details">
+                            • All Tier 1 features<br>
+                            • 15 pictures per day<br>
+                            • 10 videos per day<br>
+                            • 25 documents per day<br>
+                            • 50 voice messages per day
+                        </div>
                     </div>
                     <div class="tier-item">
-                        <strong>Tier 3:</strong> Messages + Pictures + Videos (10MB)
+                        <h4>Tier 3 - €10/month</h4>
+                        <div class="tier-details">
+                            • All Tier 2 features<br>
+                            • 30 pictures per day<br>
+                            • 20 videos per day<br>
+                            • 50 documents per day<br>
+                            • 100 voice messages per day
+                        </div>
                     </div>
                 </div>
                 <p class="tier-description">
                     <strong>Note:</strong> Developer, Admin, and Owner roles automatically have Tier 3 permissions regardless of assigned tier.
+                    Owner role has unlimited uploads for all media types.
                 </p>
             </div>
 
@@ -543,16 +582,16 @@
                     <div class="stat-label">Active Users</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="queuedUsersCount">-</div>
-                    <div class="stat-label">Queued Users</div>
-                </div>
-                <div class="stat-card">
                     <div class="stat-number" id="mutedUsersCount">-</div>
                     <div class="stat-label">Muted Users</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number" id="totalUsersCount">-</div>
                     <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">100</div>
+                    <div class="stat-label">Max Users</div>
                 </div>
             </div>
 
@@ -700,7 +739,6 @@
             .then(res => res.json())
             .then(data => {
                 document.getElementById('activeUsersCount').textContent = data.activeUsers;
-                document.getElementById('queuedUsersCount').textContent = data.queuedUsers;
                 document.getElementById('mutedUsersCount').textContent = data.mutedUsers;
                 document.getElementById('totalUsersCount').textContent = users.length;
             })
