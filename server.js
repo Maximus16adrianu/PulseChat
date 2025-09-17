@@ -11,8 +11,6 @@ const archiver = require('archiver'); // You'll need to install this: npm instal
 
 const app = express();
 app.set('trust proxy', 1);
-
-const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
