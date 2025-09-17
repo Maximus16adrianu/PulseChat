@@ -28,23 +28,23 @@ const VOICE_MESSAGE_COOLDOWN = 2 * 1000; // 2 seconds for voice messages
 const MAX_DOCUMENT_SIZE = 50 * 1024; // 50KB
 const MAX_VOICE_SIZE = 2 * 1024 * 1024; // 2MB
 
-// Daily limits per tier
+// Updated tier limits - NO MORE TIER 1 FREE
 const TIER_LIMITS = {
-  1: { // Free tier
+  1: { // 100€/lifetime
     pictures: 5,
     videos: 5,
-    documents: 5,
-    voice: 10
+    documents: 10,
+    voice: 20
   },
-  2: { // €5/month tier
+  2: { // 150€/lifetime
     pictures: 15,
     videos: 10,
     documents: 25,
     voice: 50
   },
-  3: { // €10/month tier  
-    pictures: 30,
-    videos: 20,
+  3: { // 150€/lifetime
+    pictures: 40,
+    videos: 25,
     documents: 50,
     voice: 100
   }
@@ -162,7 +162,8 @@ async function initializeDirectories() {
     'private/friends',
     'private/logins',
     'private/mutes',
-    'private/cooldowns'
+    'private/cooldowns',
+    'private/requests' // New directory for pending requests
   ];
   
   for (const dir of dirs) {
@@ -181,7 +182,8 @@ async function initializeDirectories() {
     'private/users/users.json',
     'private/friends/friends.json',
     'private/logins/logins.json',
-    'private/mutes/mutes.json'
+    'private/mutes/mutes.json',
+    'private/requests/requests.json' // New file for pending requests
   ];
   
   for (const file of files) {
@@ -260,9 +262,9 @@ function generateSessionToken() {
 
 function getUserTier(user) {
   if (['owner', 'admin', 'developer'].includes(user.role)) {
-    return 3;
+    return 3; // Staff gets highest tier
   }
-  return user.tier || 1;
+  return user.tier || 0; // Default to 0 (pending)
 }
 
 function isAdminOrOwner(user) {
@@ -297,6 +299,25 @@ async function getUserById(userId) {
 async function getUserByUsername(username) {
   const users = await loadJSON('private/users/users.json');
   return users.find(u => u.username === username);
+}
+
+// New function to get pending request by username
+async function getPendingRequestByUsername(username) {
+  const requests = await loadJSON('private/requests/requests.json');
+  return requests.find(r => r.username === username);
+}
+
+// Function to check if user is approved (tier > 0)
+function isUserApproved(user) {
+  if (!user) return false;
+  
+  // Staff roles are always approved
+  if (['owner', 'admin', 'developer'].includes(user.role)) {
+    return true;
+  }
+  
+  // Regular users need tier 1+ to be approved
+  return user.tier && user.tier > 0;
 }
 
 // Generate consistent chat ID for two users
@@ -882,6 +903,50 @@ async function unbanUser(userId) {
   return { success: true };
 }
 
+// New function to approve a pending request
+async function approveRequest(requestId, tier) {
+  const requests = await loadJSON('private/requests/requests.json');
+  const users = await loadJSON('private/users/users.json');
+  
+  const requestIndex = requests.findIndex(r => r.id === requestId);
+  if (requestIndex === -1) {
+    return { success: false, error: 'Request not found' };
+  }
+  
+  const request = requests[requestIndex];
+  
+  // Check if username is already taken in users.json
+  const existingUser = users.find(u => u.username === request.username);
+  if (existingUser) {
+    return { success: false, error: 'Username already taken' };
+  }
+  
+  // Create user account with approved tier
+  const newUser = {
+    id: generateUserId(),
+    username: request.username,
+    password: request.password,
+    tier: tier,
+    role: 'user',
+    banned: false,
+    created: Date.now(),
+    approvedAt: Date.now(),
+    settings: {
+      allowFriendRequests: true,
+      allowNotifications: true
+    }
+  };
+  
+  users.push(newUser);
+  await saveJSON('private/users/users.json', users);
+  
+  // Remove from pending requests
+  requests.splice(requestIndex, 1);
+  await saveJSON('private/requests/requests.json', requests);
+  
+  return { success: true, user: newUser };
+}
+
 // Send updated user lists helper
 async function sendUpdatedUserLists(socket, userId) {
   try {
@@ -1060,7 +1125,13 @@ async function checkPictureLimit(userId, userRole) {
   
   // Get user and determine tier
   const user = await getUserById(userId);
-  const tier = user ? getUserTier(user) : 1;
+  const tier = user ? getUserTier(user) : 0;
+  
+  // If tier 0 (pending), deny access
+  if (tier === 0) {
+    return { allowed: false, reason: 'You need to purchase a subscription to upload pictures' };
+  }
+  
   const limit = TIER_LIMITS[tier].pictures;
   
   // Check daily limit
@@ -1097,7 +1168,13 @@ async function checkVideoLimit(userId, userRole) {
   
   // Get user and determine tier
   const user = await getUserById(userId);
-  const tier = user ? getUserTier(user) : 1;
+  const tier = user ? getUserTier(user) : 0;
+  
+  // If tier 0 (pending), deny access
+  if (tier === 0) {
+    return { allowed: false, reason: 'You need to purchase a subscription to upload videos' };
+  }
+  
   const limit = TIER_LIMITS[tier].videos;
   
   // Check daily limit
@@ -1134,7 +1211,13 @@ async function checkDocumentLimit(userId, userRole) {
   
   // Get user and determine tier
   const user = await getUserById(userId);
-  const tier = user ? getUserTier(user) : 1;
+  const tier = user ? getUserTier(user) : 0;
+  
+  // If tier 0 (pending), deny access
+  if (tier === 0) {
+    return { allowed: false, reason: 'You need to purchase a subscription to upload documents' };
+  }
+  
   const limit = TIER_LIMITS[tier].documents;
   
   // Check daily limit
@@ -1170,7 +1253,13 @@ async function checkVoiceLimit(userId, userRole) {
   
   // Get user and determine tier
   const user = await getUserById(userId);
-  const tier = user ? getUserTier(user) : 1;
+  const tier = user ? getUserTier(user) : 0;
+  
+  // If tier 0 (pending), deny access
+  if (tier === 0) {
+    return { allowed: false, reason: 'You need to purchase a subscription to send voice messages' };
+  }
+  
   const limit = TIER_LIMITS[tier].voice;
   
   // Check daily limit
@@ -1227,6 +1316,14 @@ io.on('connection', (socket) => {
       
       // If no valid session, try username/password
       if (!user && username && password) {
+        // First check if it's a pending request
+        const pendingRequest = await getPendingRequestByUsername(username);
+        if (pendingRequest && pendingRequest.password === password) {
+          socket.emit('auth_error', 'PURCHASE_REQUIRED');
+          return;
+        }
+        
+        // Then check actual users
         const users = await loadJSON('private/users/users.json');
         user = users.find(u => u.username === username && u.password === password);
         
@@ -1245,6 +1342,12 @@ io.on('connection', (socket) => {
       
       if (user.banned) {
         socket.emit('auth_error', 'User is banned');
+        return;
+      }
+      
+      // Check if user is approved (tier > 0)
+      if (!isUserApproved(user)) {
+        socket.emit('auth_error', 'PURCHASE_REQUIRED');
         return;
       }
       
@@ -1340,6 +1443,12 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
+      const user = await getUserById(socket.userId);
+      if (!isUserApproved(user)) {
+        socket.emit('message_error', 'You need to purchase a subscription to access messages');
+        return;
+      }
+      
       const { friendId } = data;
       
       // Get validated messages (this will automatically clean up ghost messages)
@@ -1357,13 +1466,19 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
-      const { messageId } = data;
       const currentUser = await getUserById(socket.userId);
       
       if (!currentUser) {
         socket.emit('message_error', 'User not found');
         return;
       }
+      
+      if (!isUserApproved(currentUser)) {
+        socket.emit('message_error', 'You need to purchase a subscription to delete messages');
+        return;
+      }
+      
+      const { messageId } = data;
       
       // Find the message first to check permissions
       const chats = await loadJSON('private/chats.json');
@@ -1437,6 +1552,12 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('message_error', 'You need to purchase a subscription to send messages');
+        return;
+      }
+      
       const { receiverId, content } = data;
       
       // Check if user is muted
@@ -1506,6 +1627,12 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('friend_request_error', 'You need to purchase a subscription to send friend requests');
+        return;
+      }
+      
       const { username } = data;
       
       // Check friend request cooldown
@@ -1524,6 +1651,12 @@ io.on('connection', (socket) => {
       
       if (targetUser.id === socket.userId) {
         socket.emit('friend_request_error', 'Cannot add yourself');
+        return;
+      }
+      
+      // Check if target user is approved
+      if (!isUserApproved(targetUser)) {
+        socket.emit('friend_request_error', 'This user needs to purchase a subscription first');
         return;
       }
       
@@ -1591,6 +1724,12 @@ io.on('connection', (socket) => {
   socket.on('respond_friend_request', async (data) => {
     try {
       if (!socket.userId) return;
+      
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('friend_request_error', 'You need to purchase a subscription to respond to friend requests');
+        return;
+      }
       
       const { requestId, accept } = data;
       
@@ -1661,6 +1800,12 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('message_error', 'You need to purchase a subscription to block users');
+        return;
+      }
+      
       const { userId: targetUserId } = data;
       
       const friends = await loadJSON('private/friends/friends.json');
@@ -1708,6 +1853,12 @@ io.on('connection', (socket) => {
   socket.on('unblock_user', async (data) => {
     try {
       if (!socket.userId) return;
+      
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('message_error', 'You need to purchase a subscription to unblock users');
+        return;
+      }
       
       const { userId: targetUserId } = data;
       
@@ -1855,6 +2006,12 @@ io.on('connection', (socket) => {
     try {
       if (!socket.userId) return;
       
+      const currentUser = await getUserById(socket.userId);
+      if (!isUserApproved(currentUser)) {
+        socket.emit('settings_error', 'You need to purchase a subscription to update settings');
+        return;
+      }
+      
       const { allowFriendRequests, allowNotifications } = data;
       
       const users = await loadJSON('private/users/users.json');
@@ -1913,6 +2070,8 @@ io.on('connection', (socket) => {
 });
 
 // API Routes
+
+// Updated registration route - saves to requests.json instead of users.json
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -1921,30 +2080,34 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Username and password required' });
     }
     
+    // Check if username already exists in users.json
     const users = await loadJSON('private/users/users.json');
-    
     if (users.find(u => u.username === username)) {
       return res.status(400).json({ error: 'Username already exists' });
     }
     
-    const user = {
+    // Check if username already exists in pending requests
+    const requests = await loadJSON('private/requests/requests.json');
+    if (requests.find(r => r.username === username)) {
+      return res.status(400).json({ error: 'Registration request already exists' });
+    }
+    
+    // Create pending request
+    const request = {
       id: generateUserId(),
       username,
       password, // In production, hash this password!
-      tier: 1,
-      role: 'user',
-      banned: false,
       created: Date.now(),
-      settings: {
-        allowFriendRequests: true,
-        allowNotifications: true // Default notifications enabled
-      }
+      status: 'pending'
     };
     
-    users.push(user);
-    await saveJSON('private/users/users.json', users);
+    requests.push(request);
+    await saveJSON('private/requests/requests.json', requests);
     
-    res.json({ message: 'User registered successfully', userId: user.id });
+    res.json({ 
+      message: 'Registration request submitted successfully. You will be able to login once your account is approved.',
+      status: 'pending'
+    });
     
   } catch (error) {
     console.error('Registration error:', error);
@@ -1974,6 +2137,11 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid user' });
+    }
+    
+    // Check if user is approved
+    if (!isUserApproved(user)) {
+      return res.status(403).json({ error: 'You need to purchase a subscription to upload files' });
     }
     
     const userTier = getUserTier(user);
@@ -2154,6 +2322,71 @@ app.use('/api/admin', (req, res, next) => {
     return res.status(401).json({ error: 'Invalid API key' });
   }
   next();
+});
+
+// Get pending requests
+app.get('/api/admin/requests', async (req, res) => {
+  try {
+    const requests = await loadJSON('private/requests/requests.json');
+    
+    const requestsWithDetails = requests.map(request => {
+      const createdDate = new Date(request.created);
+      return {
+        ...request,
+        password: undefined, // Don't send passwords
+        createdFormatted: createdDate.toLocaleString()
+      };
+    });
+    
+    res.json(requestsWithDetails);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Approve a pending request
+app.post('/api/admin/requests/:requestId/approve', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { tier } = req.body;
+    
+    if (!tier || tier < 1 || tier > 3) {
+      return res.status(400).json({ error: 'Invalid tier (must be 1, 2, or 3)' });
+    }
+    
+    const result = await approveRequest(requestId, parseInt(tier));
+    
+    if (result.success) {
+      res.json({ message: 'Request approved successfully', user: result.user });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reject a pending request
+app.post('/api/admin/requests/:requestId/reject', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    
+    const requests = await loadJSON('private/requests/requests.json');
+    const requestIndex = requests.findIndex(r => r.id === requestId);
+    
+    if (requestIndex === -1) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    
+    requests.splice(requestIndex, 1);
+    await saveJSON('private/requests/requests.json', requests);
+    
+    res.json({ message: 'Request rejected successfully' });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/admin/users', async (req, res) => {
@@ -2398,17 +2631,20 @@ app.get('/api/admin/stats', async (req, res) => {
   try {
     const mutes = await loadJSON('private/mutes/mutes.json');
     const activeMutes = mutes.filter(m => m.muteEnd > Date.now());
+    const requests = await loadJSON('private/requests/requests.json');
     
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: activeMutes.length
+      mutedUsers: activeMutes.length,
+      pendingRequests: requests.length
     });
   } catch (error) {
     res.json({
       activeUsers: activeUsers.size,
       maxUsers: MAX_ACTIVE_USERS,
-      mutedUsers: 0
+      mutedUsers: 0,
+      pendingRequests: 0
     });
   }
 });
@@ -2571,16 +2807,18 @@ async function start() {
     console.log(`Voice message cooldown: 2 seconds`);
     console.log(`Max document size: 50KB`);
     console.log(`Max voice message size: 2MB`);
-    console.log(`Tier limits:`);
-    console.log(`  Tier 1 (Free): ${TIER_LIMITS[1].pictures} pics, ${TIER_LIMITS[1].videos} videos, ${TIER_LIMITS[1].documents} docs, ${TIER_LIMITS[1].voice} voice/day`);
-    console.log(`  Tier 2 (€5): ${TIER_LIMITS[2].pictures} pics, ${TIER_LIMITS[2].videos} videos, ${TIER_LIMITS[2].documents} docs, ${TIER_LIMITS[2].voice} voice/day`);
-    console.log(`  Tier 3 (€10): ${TIER_LIMITS[3].pictures} pics, ${TIER_LIMITS[3].videos} videos, ${TIER_LIMITS[3].documents} docs, ${TIER_LIMITS[3].voice} voice/day`);
+    console.log(`NEW TIER SYSTEM - NO FREE TIER:`);
+    console.log(`  Tier 1 (€100): ${TIER_LIMITS[1].pictures} pics, ${TIER_LIMITS[1].videos} videos, ${TIER_LIMITS[1].documents} docs, ${TIER_LIMITS[1].voice} voice/day`);
+    console.log(`  Tier 2 (€150): ${TIER_LIMITS[2].pictures} pics, ${TIER_LIMITS[2].videos} videos, ${TIER_LIMITS[2].documents} docs, ${TIER_LIMITS[2].voice} voice/day`);
+    console.log(`  Tier 3 (€200): ${TIER_LIMITS[3].pictures} pics, ${TIER_LIMITS[3].videos} videos, ${TIER_LIMITS[3].documents} docs, ${TIER_LIMITS[3].voice} voice/day`);
     console.log(`Audio format: WebM only`);
     console.log(`Ghost message prevention: ENABLED`);
     console.log(`File structure: Chat-centric organization`);
     console.log(`Upload tracking: Persistent (private/cooldowns/upload_tracking.json)`);
     console.log(`Daily reset: Automatic at midnight`);
     console.log(`Admin/Developer/Owner roles: Tier 3 privileges`);
+    console.log(`PENDING REQUESTS: Users register to private/requests/requests.json until approved`);
+    console.log(`TIER 0 BLOCKING: Unapproved users cannot chat, upload, or do anything until given a tier`);
   });
 }
 

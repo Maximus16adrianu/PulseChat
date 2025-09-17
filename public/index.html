@@ -242,6 +242,20 @@
                 <p>Welcome back! Sign in to continue</p>
             </div>
             
+            <div class="login-info-notice">
+                <div class="info-notice">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 8v4"></path>
+                        <path d="M12 16h.01"></path>
+                    </svg>
+                    <div class="notice-text">
+                        <strong>Account Activation Required</strong>
+                        <p>If you just registered, you need to purchase lifetime access and wait for admin approval before you can login. This process takes up to 12 hours after payment confirmation.</p>
+                    </div>
+                </div>
+            </div>
+            
             <form class="auth-form">
                 <div class="form-group">
                     <label for="username">Username</label>
@@ -264,19 +278,39 @@
     <!-- Registration Modal -->
     <div id="registerModal" class="modal hidden">
         <div class="modal-backdrop"></div>
-        <div class="modal-content auth-modal">
+        <div class="modal-content auth-modal registration-modal">
             <div class="auth-header">
                 <div class="pulse-logo">
                     <div class="pulse-icon"></div>
                     <h2>Join PulseChat</h2>
                 </div>
-                <p>Create your account to get started</p>
+                <p>Create your account and purchase lifetime access</p>
+            </div>
+            
+            <div class="registration-steps">
+                <div class="step-indicator">
+                    <div class="step active">
+                        <div class="step-number">1</div>
+                        <span>Register</span>
+                    </div>
+                    <div class="step-arrow">→</div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <span>Payment</span>
+                    </div>
+                    <div class="step-arrow">→</div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <span>Approval</span>
+                    </div>
+                </div>
             </div>
             
             <form class="auth-form">
                 <div class="form-group">
                     <label for="regUsername">Username</label>
                     <input type="text" id="regUsername" placeholder="Choose a username" required>
+                    <small class="field-note">This username will be used for payment identification</small>
                 </div>
                 <div class="form-group">
                     <label for="regPassword">Password</label>
@@ -289,6 +323,120 @@
             </form>
             
             <div id="regMessage" class="message-display"></div>
+            
+            <!-- Payment Information Section -->
+            <div id="paymentInfo" class="payment-info-section hidden">
+                <div class="payment-header">
+                    <h3>Payment Information</h3>
+                    <p>Complete your registration by purchasing lifetime access</p>
+                </div>
+                
+                <div class="bank-account-info">
+                    <h4>Bank Transfer Details</h4>
+                    <div class="bank-details">
+                        <div class="bank-field">
+                            <label>Bank Account Number:</label>
+                            <div class="bank-value">COMING SOON</div>
+                        </div>
+                        <div class="bank-field">
+                            <label>Account Holder:</label>
+                            <div class="bank-value">COMING SOON</div>
+                        </div>
+                        <div class="bank-field">
+                            <label>Bank:</label>
+                            <div class="bank-value">COMING SOON</div>
+                        </div>
+                        <div class="bank-field">
+                            <label>SWIFT/BIC:</label>
+                            <div class="bank-value">COMING SOON</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tier-selection">
+                    <h4>Choose Your Tier</h4>
+                    <div class="tier-options">
+                        <div class="tier-option">
+                            <div class="tier-header">
+                                <h5>Tier 1 - €100 Lifetime</h5>
+                                <div class="tier-price">€100</div>
+                            </div>
+                            <ul>
+                                <li>Unlimited text messages</li>
+                                <li>5 pictures per day</li>
+                                <li>5 videos per day</li>
+                                <li>10 documents per day</li>
+                                <li>20 voice messages per day</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="tier-option popular">
+                            <div class="tier-badge">Most Popular</div>
+                            <div class="tier-header">
+                                <h5>Tier 2 - €150 Lifetime</h5>
+                                <div class="tier-price">€150</div>
+                            </div>
+                            <ul>
+                                <li>Unlimited text messages</li>
+                                <li>15 pictures per day</li>
+                                <li>10 videos per day</li>
+                                <li>25 documents per day</li>
+                                <li>50 voice messages per day</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="tier-option premium">
+                            <div class="tier-badge">Premium</div>
+                            <div class="tier-header">
+                                <h5>Tier 3 - €200 Lifetime</h5>
+                                <div class="tier-price">€200</div>
+                            </div>
+                            <ul>
+                                <li>Unlimited text messages</li>
+                                <li>40 pictures per day</li>
+                                <li>25 videos per day</li>
+                                <li>50 documents per day</li>
+                                <li>100 voice messages per day</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="payment-instructions">
+                    <div class="critical-warning">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <path d="M12 17h.01"></path>
+                        </svg>
+                        <div class="warning-text">
+                            <strong>CRITICAL: Include Your Username in Payment</strong>
+                            <p>You MUST include your exact username <strong id="paymentUsername"><!-- Username will be inserted here --></strong> in the payment reference/description. If the username is missing or incorrect, we cannot identify your payment and your account will not be activated.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="payment-steps">
+                        <h4>Payment Instructions</h4>
+                        <ol>
+                            <li>Choose your desired tier above</li>
+                            <li>Send a bank transfer with the exact amount to the account details provided</li>
+                            <li><strong>Include your username "<span id="paymentUsernameRef"><!-- Username will be inserted here --></span>" in the payment reference/description</strong></li>
+                            <li>Wait for admin approval (up to 12 hours after payment confirmation)</li>
+                            <li>Login once your account is activated</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="payment-footer">
+                        <p><strong>Payment Processing Time:</strong> Admin approval takes up to 12 hours after payment confirmation.</p>
+                        <p><strong>Important:</strong> One-time lifetime payment. No recurring fees.</p>
+                    </div>
+                </div>
+                
+                <div class="payment-actions">
+                    <button class="btn btn-primary" onclick="acknowledgePayment()">I Understand - Continue to Login</button>
+                    <button class="btn btn-secondary" onclick="hidePaymentInfo()">Back to Registration</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -454,25 +602,25 @@
                                     <div class="pulse-icon"></div>
                                     <h4>PulseChat</h4>
                                 </div>
-                                <span class="version-badge">v1.2.0</span>
+                                <span class="version-badge">v1.3.0</span>
                             </div>
                             
                             <div class="about-content">
                                 <div class="about-section-block">
-                                    <h5>Tier System</h5>
+                                    <h5>Lifetime Access Tiers</h5>
                                     <div class="tier-info-blocks">
                                         <div class="tier-info-block">
-                                            <h6>Tier 1 - Free</h6>
+                                            <h6>Tier 1 - €100 Lifetime</h6>
                                             <ul>
                                                 <li><strong>Text messages:</strong> Unlimited</li>
                                                 <li><strong>Pictures:</strong> 5 per day</li>
                                                 <li><strong>Videos:</strong> 5 per day</li>
-                                                <li><strong>Documents:</strong> 5 per day</li>
-                                                <li><strong>Voice messages:</strong> 10 per day</li>
+                                                <li><strong>Documents:</strong> 10 per day</li>
+                                                <li><strong>Voice messages:</strong> 20 per day</li>
                                             </ul>
                                         </div>
                                         <div class="tier-info-block">
-                                            <h6>Tier 2 - €5/month</h6>
+                                            <h6>Tier 2 - €150 Lifetime</h6>
                                             <ul>
                                                 <li><strong>Text messages:</strong> Unlimited</li>
                                                 <li><strong>Pictures:</strong> 15 per day</li>
@@ -482,17 +630,51 @@
                                             </ul>
                                         </div>
                                         <div class="tier-info-block">
-                                            <h6>Tier 3 - €10/month</h6>
+                                            <h6>Tier 3 - €200 Lifetime</h6>
                                             <ul>
                                                 <li><strong>Text messages:</strong> Unlimited</li>
-                                                <li><strong>Pictures:</strong> 30 per day</li>
-                                                <li><strong>Videos:</strong> 20 per day</li>
+                                                <li><strong>Pictures:</strong> 40 per day</li>
+                                                <li><strong>Videos:</strong> 25 per day</li>
                                                 <li><strong>Documents:</strong> 50 per day</li>
                                                 <li><strong>Voice messages:</strong> 100 per day</li>
                                             </ul>
                                         </div>
                                     </div>
                                     <p><em>Admin, Developer, and Owner roles have Tier 3 privileges. Owner role has unlimited uploads.</em></p>
+                                </div>
+                                
+                                <div class="about-section-block subscription-process-block">
+                                    <h5>Getting Started</h5>
+                                    <div class="process-steps">
+                                        <div class="process-step">
+                                            <div class="step-number">1</div>
+                                            <div class="step-content">
+                                                <h6>Create Account</h6>
+                                                <p>Register with your desired username and password</p>
+                                            </div>
+                                        </div>
+                                        <div class="process-step">
+                                            <div class="step-number">2</div>
+                                            <div class="step-content">
+                                                <h6>Purchase Lifetime Access</h6>
+                                                <p>Choose your preferred tier and complete bank transfer payment</p>
+                                            </div>
+                                        </div>
+                                        <div class="process-step">
+                                            <div class="step-number">3</div>
+                                            <div class="step-content">
+                                                <h6>Wait for Approval</h6>
+                                                <p>Admin approval takes up to 12 hours after payment confirmation</p>
+                                            </div>
+                                        </div>
+                                        <div class="process-step">
+                                            <div class="step-number">4</div>
+                                            <div class="step-content">
+                                                <h6>Start Chatting</h6>
+                                                <p>Once approved, login and enjoy your lifetime access</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div class="about-section-block">
@@ -504,6 +686,7 @@
                                         <li><strong>Document sharing:</strong> Share text documents up to 50KB</li>
                                         <li><strong>Friend system:</strong> Add friends and manage your social network</li>
                                         <li><strong>Privacy controls:</strong> Block users and manage friend requests</li>
+                                        <li><strong>Lifetime access:</strong> Pay once, use forever with no recurring fees</li>
                                     </ul>
                                 </div>
                                 
@@ -539,7 +722,7 @@
                                 
                                 <div class="about-section-block">
                                     <h5>Contact</h5>
-                                    <p>For technical support or account issues, contact your local administrator or owner.</p>
+                                    <p>For technical support, account issues, or payment inquiries, contact your local administrator or owner.</p>
                                 </div>
                             </div>
                         </div>

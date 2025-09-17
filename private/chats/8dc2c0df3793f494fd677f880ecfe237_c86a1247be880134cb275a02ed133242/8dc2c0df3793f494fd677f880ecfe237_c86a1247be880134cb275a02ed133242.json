@@ -1,0 +1,138 @@
+[
+  {
+    "id": "7087436a420adb4ac98184ca22bafcd6",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "hey",
+    "type": "text",
+    "timestamp": 1758115292137
+  },
+  {
+    "id": "eafd8f67d6d30b36ecc5ae8345763bd5",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "hey",
+    "type": "text",
+    "timestamp": 1758115296093
+  },
+  {
+    "id": "ddd2309df3f00afa75c6f631cd59acfe",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "adrian",
+    "type": "text",
+    "timestamp": 1758115318512
+  },
+  {
+    "id": "013fb1f8ec6e24ac7f71c1369c28087f",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "?",
+    "type": "text",
+    "timestamp": 1758115322238
+  },
+  {
+    "id": "c4ef4d7840fd45c0214add971aa4fcbc",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "was jetzt",
+    "type": "text",
+    "timestamp": 1758115338957
+  },
+  {
+    "id": "b95d47456b53bd18b8ae43f3e5725f6d",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "warum sagst du nichts",
+    "type": "text",
+    "timestamp": 1758115356871
+  },
+  {
+    "id": "333dcc1596241fa724e17ecd00ef34c1",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "ich rede",
+    "type": "text",
+    "timestamp": 1758115362409
+  },
+  {
+    "id": "e7549df0d6bfa49f89569006f465e9bd",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "höre dich nd",
+    "type": "text",
+    "timestamp": 1758115370512
+  },
+  {
+    "id": "c9530518cc1234497fefd9119f46e3cc",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "jetzt",
+    "type": "text",
+    "timestamp": 1758115396442
+  },
+  {
+    "id": "988da5e8fe36a6a8229092b03dd31c56",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "du nigger",
+    "type": "text",
+    "timestamp": 1758116338391
+  },
+  {
+    "id": "e0ac9b1ab518183c3b2a678ba3fcc27a",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "1758116375578-887773677.mp4",
+    "type": "video",
+    "timestamp": 1758116375585
+  },
+  {
+    "id": "8bc51a05436d2b2fd18cc889bafd4697",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "colins username ist",
+    "type": "text",
+    "timestamp": 1758116444326
+  },
+  {
+    "id": "1ac38aeb0063e0541c62764b076d0628",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "Paul",
+    "type": "text",
+    "timestamp": 1758116446724
+  },
+  {
+    "id": "d78ec11b9bcb3cd3c23ec09ed7794cb6",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "wenn du ihn adden willst",
+    "type": "text",
+    "timestamp": 1758116454392
+  },
+  {
+    "id": "31cbdd19b5efa3e86eede70f62c0e9e5",
+    "senderId": "c86a1247be880134cb275a02ed133242",
+    "receiverId": "8dc2c0df3793f494fd677f880ecfe237",
+    "content": "adrian ich kann nd die bildschirme switchen also beide sind an aber ich kann nd vom ersten zu zweiten gehen",
+    "type": "text",
+    "timestamp": 1758120070840
+  },
+  {
+    "id": "4141936c951622776967f8cbe2973941",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "krass",
+    "type": "text",
+    "timestamp": 1758124229722
+  },
+  {
+    "id": "1df1eb5db5ba4fe4d802fa320af6a70b",
+    "senderId": "8dc2c0df3793f494fd677f880ecfe237",
+    "receiverId": "c86a1247be880134cb275a02ed133242",
+    "content": "ja ka",
+    "type": "text",
+    "timestamp": 1758124232024
+  }
+]

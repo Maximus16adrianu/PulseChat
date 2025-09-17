@@ -108,5 +108,18 @@
     "settings": {
       "allowFriendRequests": true
     }
+  },
+  {
+    "id": "c86a1247be880134cb275a02ed133242",
+    "username": "Andre andreas",
+    "password": "popel2013",
+    "tier": 2,
+    "role": "user",
+    "banned": false,
+    "created": 1758115018514,
+    "settings": {
+      "allowFriendRequests": true,
+      "allowNotifications": true
+    }
   }
 ]

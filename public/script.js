@@ -106,6 +106,11 @@ const PulseChat = {
         banReasonModal: document.getElementById('banReasonModal'),
         autoLoginIndicator: document.getElementById('autoLoginIndicator'),
         
+        // Payment Info Elements
+        paymentInfo: document.getElementById('paymentInfo'),
+        paymentUsername: document.getElementById('paymentUsername'),
+        paymentUsernameRef: document.getElementById('paymentUsernameRef'),
+        
         // Connection recovery overlay
         reconnectOverlay: null, // Will be created dynamically
         
@@ -171,23 +176,23 @@ const PulseChat = {
     }
 };
 
-// ===== Tier Configuration =====
+// ===== Updated Tier Configuration =====
 const TIER_LIMITS = {
-    1: { // Free tier
+    1: { // €100/lifetime
         pictures: 5,
         videos: 5,
-        documents: 5,
-        voice: 10
+        documents: 10,
+        voice: 20
     },
-    2: { // €5/month tier
+    2: { // €150/lifetime
         pictures: 15,
         videos: 10,
         documents: 25,
         voice: 50
     },
-    3: { // €10/month tier  
-        pictures: 30,
-        videos: 20,
+    3: { // €200/lifetime
+        pictures: 40,
+        videos: 25,
         documents: 50,
         voice: 100
     }
@@ -199,8 +204,8 @@ const TIER_BENEFITS = {
         { text: 'Friend system & blocking', available: true },
         { text: '5 pictures per day', available: true },
         { text: '5 videos per day', available: true },
-        { text: '5 documents per day', available: true },
-        { text: '10 voice messages per day', available: true }
+        { text: '10 documents per day', available: true },
+        { text: '20 voice messages per day', available: true }
     ],
     2: [
         { text: 'Unlimited text messages', available: true },
@@ -213,8 +218,8 @@ const TIER_BENEFITS = {
     3: [
         { text: 'Unlimited text messages', available: true },
         { text: 'Friend system & blocking', available: true },
-        { text: '30 pictures per day', available: true },
-        { text: '20 videos per day', available: true },
+        { text: '40 pictures per day', available: true },
+        { text: '25 videos per day', available: true },
         { text: '50 documents per day', available: true },
         { text: '100 voice messages per day', available: true }
     ]
@@ -297,7 +302,7 @@ function getUserTierLimits() {
         // Admin/Developer get Tier 3 limits
         return TIER_LIMITS[3];
     } else {
-        // Regular user uses their tier
+        // Regular user uses their tier (now starts from tier 1, no tier 0 access)
         const userTier = PulseChat.currentUser.tier || 1;
         return TIER_LIMITS[userTier] || TIER_LIMITS[1];
     }
@@ -1401,11 +1406,27 @@ function setupSocketHandlers() {
         setCookie('pulsechat_session', token, 30); // 30 days
     });
 
+    // Updated auth_error handler to provide better feedback
     PulseChat.socket.on('auth_error', (message) => {
         PulseChat.connectionState.isReconnecting = false;
         hideModal(PulseChat.elements.autoLoginIndicator);
         hideReconnectOverlay();
-        showMessage('authMessage', message, 'error');
+        
+        // Handle special PURCHASE_REQUIRED case
+        if (message === 'PURCHASE_REQUIRED') {
+            showMessage('authMessage', 
+                'Your account is pending activation. Please complete payment as instructed during registration and wait for admin approval (up to 12 hours after payment confirmation).', 
+                'error'
+            );
+        } else if (message === 'Invalid credentials') {
+            showMessage('authMessage', 
+                'Login failed. Please check your username and password. If you just registered, you need to complete payment and wait for approval first.', 
+                'error'
+            );
+        } else {
+            showMessage('authMessage', message, 'error');
+        }
+        
         deleteCookie('pulsechat_session');
         PulseChat.currentUser = null;
     });
@@ -1662,6 +1683,7 @@ function updateProfileTab() {
     if (PulseChat.elements.profileTier) {
         const userRole = PulseChat.currentUser.role || 'user';
         const hasSpecialRole = ['admin', 'owner', 'developer'].includes(userRole);
+        // Minimum tier is now 1 (no tier 0 for approved users)
         const displayTier = hasSpecialRole ? 3 : (PulseChat.currentUser.tier || 1);
         setSafeTextContent(PulseChat.elements.profileTier, `Tier ${displayTier}`);
     }
@@ -1683,6 +1705,7 @@ function updateProfileTab() {
 function updateTierBenefits() {
     if (!PulseChat.elements.tierBenefitsList || !PulseChat.currentUser) return;
     
+    // Minimum tier is now 1 (no free tier)
     const userTier = PulseChat.currentUser.tier || 1;
     const userRole = PulseChat.currentUser.role || 'user';
     const benefits = TIER_BENEFITS[userTier] || TIER_BENEFITS[1];
@@ -1897,6 +1920,62 @@ function updateMobileUserInfo(friend) {
     }
 }
 
+// ===== Payment Info Functions =====
+
+function showPaymentInfo(username) {
+    // Update username references in payment info
+    if (PulseChat.elements.paymentUsername) {
+        setSafeTextContent(PulseChat.elements.paymentUsername, username);
+    }
+    if (PulseChat.elements.paymentUsernameRef) {
+        setSafeTextContent(PulseChat.elements.paymentUsernameRef, username);
+    }
+    
+    // Hide registration form
+    const authForm = document.querySelector('#registerModal .auth-form');
+    const regMessage = PulseChat.elements.regMessage;
+    
+    if (authForm) authForm.classList.add('hidden');
+    if (regMessage) regMessage.classList.add('hidden');
+    
+    // Show payment info
+    if (PulseChat.elements.paymentInfo) {
+        PulseChat.elements.paymentInfo.classList.remove('hidden');
+    }
+}
+
+function hidePaymentInfo() {
+    // Show registration form
+    const authForm = document.querySelector('#registerModal .auth-form');
+    const regMessage = PulseChat.elements.regMessage;
+    
+    if (authForm) authForm.classList.remove('hidden');
+    if (regMessage) regMessage.classList.remove('hidden');
+    
+    // Hide payment info
+    if (PulseChat.elements.paymentInfo) {
+        PulseChat.elements.paymentInfo.classList.add('hidden');
+    }
+}
+
+function acknowledgePayment() {
+    // Close registration modal and show login modal
+    hideModal(PulseChat.elements.registerModal);
+    hidePaymentInfo();
+    showLogin();
+    
+    // Clear registration form
+    PulseChat.elements.regUsername.value = '';
+    PulseChat.elements.regPassword.value = '';
+    clearMessage('regMessage');
+    
+    // Show information message in login
+    showMessage('authMessage', 
+        'Registration complete! Please complete your payment as instructed and wait for admin approval (up to 12 hours after payment). You can then login with your credentials.', 
+        'success'
+    );
+}
+
 // ===== Utility Functions =====
 
 // Cookie management
@@ -1989,6 +2068,7 @@ function login() {
     PulseChat.socket.emit('authenticate', { username, password });
 }
 
+// Updated register function to show payment info after successful registration
 function register() {
     const username = sanitizeInput(PulseChat.elements.regUsername.value, 50);
     const password = sanitizeInput(PulseChat.elements.regPassword.value, 200);
@@ -2008,10 +2088,16 @@ function register() {
         if (data.error) {
             showMessage('regMessage', data.error, 'error');
         } else {
-            showMessage('regMessage', 'Registration successful! You can now login.', 'success');
+            // Show success message and then payment info
+            showMessage('regMessage', 
+                'Account created successfully! Now you need to complete payment to activate your account.', 
+                'success'
+            );
+            
+            // Wait a moment, then show payment information
             setTimeout(() => {
-                showLogin();
-            }, 1500);
+                showPaymentInfo(username);
+            }, 2000);
         }
     })
     .catch(err => {
@@ -2038,6 +2124,7 @@ function showLogin() {
     hideModal(PulseChat.elements.registerModal);
     clearMessage('authMessage');
     clearMessage('regMessage');
+    hidePaymentInfo(); // Make sure payment info is hidden
 }
 
 function showRegister() {
@@ -2045,6 +2132,7 @@ function showRegister() {
     showModal(PulseChat.elements.registerModal);
     clearMessage('authMessage');
     clearMessage('regMessage');
+    hidePaymentInfo(); // Make sure payment info is hidden
 }
 
 function checkAutoLogin() {
@@ -2786,7 +2874,7 @@ window.addEventListener('load', () => {
 window.login = login;
 window.register = register;
 window.logout = logout;
-window.confirmLogout = confirmLogout; // New logout confirmation function
+window.confirmLogout = confirmLogout;
 window.showLogin = showLogin;
 window.showRegister = showRegister;
 window.showFriendsManagement = showFriendsManagement;
@@ -2824,3 +2912,8 @@ window.triggerDocumentUpload = triggerDocumentUpload;
 window.uploadImageVideo = uploadImageVideo;
 window.uploadDocument = uploadDocument;
 window.downloadDocument = downloadDocument;
+
+// Payment functions
+window.showPaymentInfo = showPaymentInfo;
+window.hidePaymentInfo = hidePaymentInfo;
+window.acknowledgePayment = acknowledgePayment;

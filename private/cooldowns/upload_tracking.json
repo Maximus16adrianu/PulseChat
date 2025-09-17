@@ -1,4 +1,23 @@
 {
-  "lastReset": "2025-09-15",
-  "users": {}
+  "lastReset": "2025-09-17",
+  "users": {
+    "132531116ffdadeef36522f2488f7ba9": {
+      "pictures": {
+        "dailyUploads": [],
+        "lastUpload": 0
+      },
+      "videos": {
+        "dailyUploads": [],
+        "lastUpload": 1757972157396
+      },
+      "documents": {
+        "dailyUploads": [],
+        "lastUpload": 0
+      },
+      "voice": {
+        "dailyUploads": [],
+        "lastUpload": 0
+      }
+    }
+  }
 }

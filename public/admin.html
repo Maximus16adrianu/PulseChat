@@ -147,7 +147,7 @@
             font-size: 1.1em;
         }
 
-        .users-section {
+        .section {
             background-color: #2d2d2d;
             padding: 30px;
             border-radius: 10px;
@@ -184,26 +184,26 @@
             border-color: #667eea;
         }
 
-        .users-table {
+        .table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
         }
 
-        .users-table th,
-        .users-table td {
+        .table th,
+        .table td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #444;
         }
 
-        .users-table th {
+        .table th {
             background-color: #1a1a1a;
             color: #667eea;
             font-weight: 600;
         }
 
-        .users-table tr:hover {
+        .table tr:hover {
             background-color: #383838;
         }
 
@@ -237,18 +237,28 @@
             color: white;
         }
 
-        .tier-1 {
-            background-color: #718096;
+        .tier-0 {
+            background-color: #e53e3e;
             color: white;
         }
 
-        .tier-2 {
+        .tier-1 {
             background-color: #3182ce;
             color: white;
         }
 
-        .tier-3 {
+        .tier-2 {
             background-color: #9f7aea;
+            color: white;
+        }
+
+        .tier-3 {
+            background-color: #38a169;
+            color: white;
+        }
+
+        .status-pending {
+            background-color: #d69e2e;
             color: white;
         }
 
@@ -481,12 +491,12 @@
                 width: 100%;
             }
 
-            .users-table {
+            .table {
                 font-size: 0.9em;
             }
 
-            .users-table th,
-            .users-table td {
+            .table th,
+            .table td {
                 padding: 8px;
             }
 
@@ -512,8 +522,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 PulseChat Admin Panel</h1>
-            <p>Manage users, roles, tiers, and monitor system statistics</p>
+            <h1>PulseChat Admin Panel</h1>
+            <p>Manage users, pending requests, roles, tiers, and monitor system statistics</p>
         </div>
 
         <div class="auth-section">
@@ -525,9 +535,10 @@
                 </div>
             </div>
             <div id="authSuccess" class="hidden">
-                <h3 style="color: #38a169;">✅ Authenticated Successfully</h3>
+                <h3 style="color: #38a169;">Authenticated Successfully</h3>
                 <div style="margin-top: 15px;">
-                    <button class="btn btn-info" onclick="downloadBackup()">📦 Download Backup</button>
+                    <button class="btn btn-info" onclick="downloadBackup()">Download Backup</button>
+                    <button class="btn btn-warning" onclick="runCleanup()">Manual Cleanup</button>
                     <button class="btn btn-danger" onclick="logout()">Logout</button>
                 </div>
             </div>
@@ -536,20 +547,29 @@
         <div id="adminContent" class="hidden">
             <!-- Tier Information -->
             <div class="tier-info">
-                <h3>📊 User Tier System</h3>
+                <h3>Lifetime Access Tier System</h3>
                 <div class="tier-list">
                     <div class="tier-item">
-                        <h4>Tier 1 - Free</h4>
+                        <h4>Tier 0 - Pending</h4>
                         <div class="tier-details">
-                            • Text messages only<br>
-                            • 5 pictures per day<br>
-                            • 5 videos per day<br>
-                            • 5 documents per day<br>
-                            • 10 voice messages per day
+                            • Cannot chat or upload anything<br>
+                            • Shown "Purchase Required" message<br>
+                            • Must be approved to access features<br>
+                            • Saved in pending requests until approved
                         </div>
                     </div>
                     <div class="tier-item">
-                        <h4>Tier 2 - €5/month</h4>
+                        <h4>Tier 1 - €100 Lifetime</h4>
+                        <div class="tier-details">
+                            • Full chat access<br>
+                            • 5 pictures per day<br>
+                            • 5 videos per day<br>
+                            • 10 documents per day<br>
+                            • 20 voice messages per day
+                        </div>
+                    </div>
+                    <div class="tier-item">
+                        <h4>Tier 2 - €150 Lifetime</h4>
                         <div class="tier-details">
                             • All Tier 1 features<br>
                             • 15 pictures per day<br>
@@ -559,11 +579,11 @@
                         </div>
                     </div>
                     <div class="tier-item">
-                        <h4>Tier 3 - €10/month</h4>
+                        <h4>Tier 3 - €200 Lifetime</h4>
                         <div class="tier-details">
                             • All Tier 2 features<br>
-                            • 30 pictures per day<br>
-                            • 20 videos per day<br>
+                            • 40 pictures per day<br>
+                            • 25 videos per day<br>
                             • 50 documents per day<br>
                             • 100 voice messages per day
                         </div>
@@ -578,8 +598,8 @@
             <!-- Statistics Section -->
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-number" id="activeUsersCount">-</div>
-                    <div class="stat-label">Active Users</div>
+                    <div class="stat-number" id="pendingRequestsCount">-</div>
+                    <div class="stat-label">Pending Requests</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number" id="mutedUsersCount">-</div>
@@ -587,19 +607,48 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-number" id="totalUsersCount">-</div>
-                    <div class="stat-label">Total Users</div>
+                    <div class="stat-label">Total Approved Users</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number">100</div>
-                    <div class="stat-label">Max Users</div>
+            </div>
+
+            <!-- Pending Requests Section -->
+            <div class="section">
+                <div class="section-title">
+                    Pending Registration Requests
+                    <button class="btn btn-primary refresh-btn" onclick="loadRequests()">Refresh</button>
+                </div>
+                
+                <div class="controls-bar">
+                    <input type="text" class="search-box" id="requestSearch" placeholder="Search pending requests..." onkeyup="filterRequests()">
+                    <span style="color: #bbb; font-size: 0.9em;">Total: <span id="filteredRequestsCount">0</span> pending requests</span>
+                </div>
+                
+                <div id="loadingRequests" class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading pending requests...
+                </div>
+
+                <div id="requestsContent" class="hidden">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Requested</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requestsTableBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
             <!-- Users Management Section -->
-            <div class="users-section">
+            <div class="section">
                 <div class="section-title">
                     User Management
-                    <button class="btn btn-primary refresh-btn" onclick="loadData()">🔄 Refresh</button>
+                    <button class="btn btn-primary refresh-btn" onclick="loadUsers()">Refresh</button>
                 </div>
                 
                 <div class="controls-bar">
@@ -613,7 +662,7 @@
                 </div>
 
                 <div id="usersContent" class="hidden">
-                    <table class="users-table">
+                    <table class="table">
                         <thead>
                             <tr>
                                 <th>Username</th>
@@ -671,11 +720,33 @@
         </div>
     </div>
 
+    <!-- Approve Request Modal -->
+    <div id="approveModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeApproveModal()">&times;</span>
+                <h3>Approve Registration Request</h3>
+            </div>
+            <p>Approve user "<span id="approveUsername"></span>" and assign a tier:</p>
+            <select id="approveTier" class="modal-input">
+                <option value="1">Tier 1 - €100 Lifetime (5 pics, 5 videos, 10 docs, 20 voice)</option>
+                <option value="2">Tier 2 - €150 Lifetime (15 pics, 10 videos, 25 docs, 50 voice)</option>
+                <option value="3">Tier 3 - €200 Lifetime (40 pics, 25 videos, 50 docs, 100 voice)</option>
+            </select>
+            <div class="modal-buttons">
+                <button class="btn btn-success" onclick="confirmApprove()">Approve & Create Account</button>
+                <button class="btn" style="background-color: #666; color: white;" onclick="closeApproveModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let apiKey = '';
         let users = [];
+        let requests = [];
         let currentBanUserId = null;
         let currentMuteUserId = null;
+        let currentApproveRequestId = null;
 
         // Authentication
         function authenticate() {
@@ -728,6 +799,7 @@
 
             loadStats();
             loadUsers();
+            loadRequests();
         }
 
         function loadStats() {
@@ -738,12 +810,38 @@
             })
             .then(res => res.json())
             .then(data => {
-                document.getElementById('activeUsersCount').textContent = data.activeUsers;
+                document.getElementById('pendingRequestsCount').textContent = data.pendingRequests || 0;
                 document.getElementById('mutedUsersCount').textContent = data.mutedUsers;
                 document.getElementById('totalUsersCount').textContent = users.length;
             })
             .catch(err => {
                 showMessage('Failed to load statistics', 'error');
+            });
+        }
+
+        function loadRequests() {
+            document.getElementById('loadingRequests').classList.remove('hidden');
+            document.getElementById('requestsContent').classList.add('hidden');
+
+            fetch('/api/admin/requests', {
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                requests = data;
+                renderRequestsTable();
+                document.getElementById('loadingRequests').classList.add('hidden');
+                document.getElementById('requestsContent').classList.remove('hidden');
+                updateFilteredRequestsCount();
+                
+                // Update stats
+                document.getElementById('pendingRequestsCount').textContent = requests.length;
+            })
+            .catch(err => {
+                showMessage('Failed to load requests', 'error');
+                document.getElementById('loadingRequests').classList.add('hidden');
             });
         }
 
@@ -773,6 +871,27 @@
             });
         }
 
+        function renderRequestsTable() {
+            const tbody = document.getElementById('requestsTableBody');
+            tbody.innerHTML = '';
+
+            requests.forEach(request => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="username-cell">${escapeHtml(request.username)}</td>
+                    <td>${request.createdFormatted || new Date(request.created).toLocaleString()}</td>
+                    <td><span class="status-badge status-pending">PENDING</span></td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn btn-success" onclick="showApproveModal('${request.id}', '${escapeHtml(request.username)}')">Approve</button>
+                            <button class="action-btn btn-danger" onclick="rejectRequest('${request.id}', '${escapeHtml(request.username)}')">Reject</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
         function renderUsersTable() {
             const tbody = document.getElementById('usersTableBody');
             tbody.innerHTML = '';
@@ -780,7 +899,7 @@
             users.forEach(user => {
                 const row = document.createElement('tr');
                 const createdDate = new Date(user.created).toLocaleDateString();
-                const userTier = user.tier || 1;
+                const userTier = user.tier || 0;
                 
                 // Determine status
                 let statusInfo = '';
@@ -839,6 +958,24 @@
             });
         }
 
+        function filterRequests() {
+            const searchTerm = document.getElementById('requestSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#requestsTableBody tr');
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const username = row.cells[0].textContent.toLowerCase();
+                if (username.includes(searchTerm)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            document.getElementById('filteredRequestsCount').textContent = visibleCount;
+        }
+
         function filterUsers() {
             const searchTerm = document.getElementById('userSearch').value.toLowerCase();
             const rows = document.querySelectorAll('#usersTableBody tr');
@@ -857,8 +994,92 @@
             document.getElementById('filteredCount').textContent = visibleCount;
         }
 
+        function updateFilteredRequestsCount() {
+            document.getElementById('filteredRequestsCount').textContent = requests.length;
+        }
+
         function updateFilteredCount() {
             document.getElementById('filteredCount').textContent = users.length;
+        }
+
+        // Request management functions
+        function showApproveModal(requestId, username) {
+            currentApproveRequestId = requestId;
+            document.getElementById('approveUsername').textContent = username;
+            document.getElementById('approveTier').value = '1';
+            document.getElementById('approveModal').style.display = 'block';
+        }
+
+        function closeApproveModal() {
+            document.getElementById('approveModal').style.display = 'none';
+            currentApproveRequestId = null;
+        }
+
+        function confirmApprove() {
+            if (!currentApproveRequestId) return;
+
+            const tier = parseInt(document.getElementById('approveTier').value);
+            
+            fetch(`/api/admin/requests/${currentApproveRequestId}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify({ tier })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Approval failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`User approved successfully with Tier ${tier}`, 'success');
+                    loadRequests();
+                    loadUsers();
+                    closeApproveModal();
+                }
+            })
+            .catch(err => {
+                console.error('Approve error:', err);
+                showMessage(`Failed to approve user: ${err.message}`, 'error');
+            });
+        }
+
+        function rejectRequest(requestId, username) {
+            if (!confirm(`Are you sure you want to reject the registration request from "${username}"? This action cannot be undone.`)) {
+                return;
+            }
+
+            fetch(`/api/admin/requests/${requestId}/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Rejection failed: ${data.error}`, 'error');
+                } else {
+                    showMessage(`Registration request from "${username}" rejected`, 'success');
+                    loadRequests();
+                }
+            })
+            .catch(err => {
+                console.error('Reject error:', err);
+                showMessage(`Failed to reject request: ${err.message}`, 'error');
+            });
         }
 
         // User management functions
@@ -1135,6 +1356,44 @@
             });
         }
 
+        // Manual cleanup function
+        function runCleanup() {
+            if (!apiKey) {
+                showMessage('Not authenticated', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to run manual cleanup? This will clean up old messages, orphaned files, expired sessions and mutes.')) {
+                return;
+            }
+
+            showMessage('Running cleanup...', 'success');
+            
+            fetch('/api/admin/cleanup', {
+                method: 'POST',
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    showMessage(`Cleanup failed: ${data.error}`, 'error');
+                } else {
+                    showMessage('Manual cleanup completed successfully!', 'success');
+                }
+            })
+            .catch(err => {
+                console.error('Cleanup error:', err);
+                showMessage(`Failed to run cleanup: ${err.message}`, 'error');
+            });
+        }
+
         // Utility functions
         function showMessage(message, type) {
             const container = document.getElementById('messageContainer');
@@ -1177,11 +1436,16 @@
         window.onclick = function(event) {
             const banModal = document.getElementById('banModal');
             const muteModal = document.getElementById('muteModal');
+            const approveModal = document.getElementById('approveModal');
+            
             if (event.target === banModal) {
                 closeBanModal();
             }
             if (event.target === muteModal) {
                 closeMuteModal();
+            }
+            if (event.target === approveModal) {
+                closeApproveModal();
             }
         }
     </script>

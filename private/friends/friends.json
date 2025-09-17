@@ -46,5 +46,20 @@
     "status": "accepted",
     "timestamp": 1757716985508,
     "acceptedAt": 1757716986478
+  },
+  {
+    "id": "07574be1815a13083a2fe15e4dfdd856",
+    "user1": "8dc2c0df3793f494fd677f880ecfe237",
+    "user2": "c86a1247be880134cb275a02ed133242",
+    "status": "accepted",
+    "timestamp": 1758115286244,
+    "acceptedAt": 1758115288524
+  },
+  {
+    "id": "be81a9d25e89582746f105c7da694da1",
+    "user1": "c86a1247be880134cb275a02ed133242",
+    "user2": "880b3a63395e010c732ed15fb9cb6112",
+    "status": "pending",
+    "timestamp": 1758120033374
   }
 ]
