@@ -722,7 +722,7 @@ body {
   background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(245, 158, 11, 0.1) 100%);
 }
 
-.tier-badge {
+.tier-option .tier-badge {
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);

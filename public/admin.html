@@ -16,40 +16,48 @@
             background-color: #1a1a1a;
             color: #ffffff;
             line-height: 1.6;
+            overflow-x: hidden;
         }
 
         .container {
             max-width: 1800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
+            margin-bottom: 25px;
+            padding: 20px 15px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border-radius: 10px;
         }
 
         .header h1 {
             color: white;
-            font-size: 2.5em;
+            font-size: clamp(1.8em, 4vw, 2.5em);
             margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: clamp(0.9em, 2vw, 1em);
+            opacity: 0.9;
         }
 
         .auth-section {
             background-color: #2d2d2d;
-            padding: 30px;
+            padding: 25px 15px;
             border-radius: 10px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             text-align: center;
         }
 
         .auth-form {
-            display: inline-flex;
+            display: flex;
             gap: 15px;
             align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
         }
 
         .auth-form input {
@@ -58,7 +66,9 @@
             border: 2px solid #555;
             color: white;
             border-radius: 5px;
-            width: 250px;
+            width: 100%;
+            max-width: 300px;
+            min-width: 200px;
         }
 
         .auth-form input:focus {
@@ -73,6 +83,8 @@
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s ease;
+            white-space: nowrap;
+            min-width: 100px;
         }
 
         .btn-primary {
@@ -122,50 +134,55 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
         }
 
         .stat-card {
             background-color: #2d2d2d;
-            padding: 25px;
+            padding: 20px 15px;
             border-radius: 10px;
             text-align: center;
             border: 2px solid #444;
         }
 
         .stat-number {
-            font-size: 2.5em;
+            font-size: clamp(2em, 5vw, 2.5em);
             font-weight: bold;
             color: #667eea;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .stat-label {
             color: #bbb;
-            font-size: 1.1em;
+            font-size: clamp(0.9em, 2.5vw, 1.1em);
         }
 
         .section {
             background-color: #2d2d2d;
-            padding: 30px;
+            padding: 20px 15px;
             border-radius: 10px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
 
         .section-title {
-            font-size: 1.5em;
-            margin-bottom: 20px;
+            font-size: clamp(1.2em, 3vw, 1.5em);
+            margin-bottom: 15px;
             color: #667eea;
             border-bottom: 2px solid #444;
-            padding-bottom: 10px;
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .controls-bar {
             display: flex;
             gap: 15px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             align-items: center;
             flex-wrap: wrap;
         }
@@ -176,7 +193,9 @@
             border: 2px solid #555;
             color: white;
             border-radius: 5px;
-            width: 300px;
+            flex: 1;
+            min-width: 200px;
+            max-width: 400px;
         }
 
         .search-box:focus {
@@ -184,23 +203,34 @@
             border-color: #667eea;
         }
 
+        .table-container {
+            overflow-x: auto;
+            margin: 15px -15px 0 -15px;
+            padding: 0 15px;
+        }
+
         .table {
             width: 100%;
+            min-width: 800px;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 15px;
         }
 
         .table th,
         .table td {
-            padding: 12px;
+            padding: 12px 8px;
             text-align: left;
             border-bottom: 1px solid #444;
+            vertical-align: top;
         }
 
         .table th {
             background-color: #1a1a1a;
             color: #667eea;
             font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
         .table tr:hover {
@@ -283,8 +313,9 @@
             border: 1px solid #555;
             color: white;
             border-radius: 4px;
-            margin-right: 5px;
+            margin: 2px;
             font-size: 12px;
+            width: 90px;
         }
 
         .action-buttons {
@@ -294,13 +325,14 @@
         }
 
         .action-btn {
-            padding: 6px 12px;
+            padding: 6px 10px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: bold;
             transition: all 0.2s;
+            white-space: nowrap;
         }
 
         .action-btn:hover {
@@ -332,17 +364,16 @@
         .loading {
             text-align: center;
             color: #bbb;
-            padding: 40px;
+            padding: 30px;
         }
 
         .refresh-btn {
-            float: right;
-            margin-bottom: 20px;
+            margin-left: auto;
         }
 
         .tier-info {
             background-color: #1a1a1a;
-            padding: 20px;
+            padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
             border-left: 4px solid #667eea;
@@ -351,6 +382,7 @@
         .tier-info h3 {
             color: #667eea;
             margin-bottom: 10px;
+            font-size: clamp(1.1em, 2.5vw, 1.3em);
         }
 
         .tier-description {
@@ -361,32 +393,34 @@
 
         .tier-list {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
         }
 
         .tier-item {
             background-color: #2d2d2d;
-            padding: 15px;
+            padding: 12px;
             border-radius: 5px;
             border: 1px solid #444;
         }
 
         .tier-item h4 {
             color: #667eea;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 0.95em;
         }
 
         .tier-item .tier-details {
-            font-size: 0.9em;
+            font-size: 0.85em;
             color: #ccc;
-            line-height: 1.4;
+            line-height: 1.3;
         }
 
         .username-cell {
             font-weight: bold;
             color: #667eea;
+            min-width: 120px;
         }
 
         .loading-spinner {
@@ -400,18 +434,6 @@
             margin-right: 10px;
         }
 
-        .ban-reason {
-            font-size: 0.9em;
-            color: #ff6b6b;
-            font-style: italic;
-        }
-
-        .mute-info {
-            font-size: 0.9em;
-            color: #d69e2e;
-            font-style: italic;
-        }
-
         .modal {
             display: none;
             position: fixed;
@@ -421,26 +443,30 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.8);
+            padding: 20px;
         }
 
         .modal-content {
             background-color: #2d2d2d;
-            margin: 15% auto;
-            padding: 30px;
+            margin: 5% auto;
+            padding: 25px 20px;
             border-radius: 10px;
             width: 90%;
             max-width: 500px;
             color: white;
+            max-height: 80vh;
+            overflow-y: auto;
         }
 
         .modal-header {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             padding-bottom: 10px;
             border-bottom: 2px solid #444;
         }
 
         .modal-header h3 {
             color: #667eea;
+            font-size: clamp(1.1em, 3vw, 1.3em);
         }
 
         .modal-input {
@@ -451,6 +477,7 @@
             color: white;
             border-radius: 5px;
             margin: 10px 0;
+            font-size: 14px;
         }
 
         .modal-input:focus {
@@ -463,14 +490,16 @@
             gap: 10px;
             justify-content: flex-end;
             margin-top: 20px;
+            flex-wrap: wrap;
         }
 
         .close {
             color: #aaa;
             float: right;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
             cursor: pointer;
+            line-height: 1;
         }
 
         .close:hover {
@@ -481,7 +510,17 @@
             to { transform: rotate(360deg); }
         }
 
+        /* Mobile optimizations */
         @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 15px 10px;
+                margin-bottom: 20px;
+            }
+
             .auth-form {
                 flex-direction: column;
                 gap: 10px;
@@ -489,23 +528,23 @@
 
             .auth-form input {
                 width: 100%;
+                max-width: none;
             }
 
-            .table {
-                font-size: 0.9em;
+            .section {
+                padding: 15px 10px;
+                margin-bottom: 20px;
             }
 
-            .table th,
-            .table td {
-                padding: 8px;
-            }
-
-            .action-buttons {
+            .section-title {
                 flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
             }
 
-            .search-box {
-                width: 100%;
+            .refresh-btn {
+                margin-left: 0;
+                align-self: flex-start;
             }
 
             .controls-bar {
@@ -513,8 +552,115 @@
                 align-items: stretch;
             }
 
+            .search-box {
+                min-width: unset;
+                max-width: none;
+            }
+
+            .table-container {
+                margin: 10px -10px 0 -10px;
+                padding: 0 10px;
+            }
+
+            .table {
+                min-width: 700px;
+            }
+
+            .table th,
+            .table td {
+                padding: 8px 6px;
+                font-size: 13px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                gap: 3px;
+            }
+
+            .action-btn {
+                font-size: 11px;
+                padding: 8px 10px;
+            }
+
+            .role-select, .tier-select {
+                width: 85px;
+                font-size: 11px;
+                padding: 5px 6px;
+                margin: 1px;
+            }
+
             .tier-list {
                 grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .tier-item {
+                padding: 10px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 10px;
+            }
+
+            .stat-card {
+                padding: 15px 10px;
+            }
+
+            .modal {
+                padding: 10px;
+            }
+
+            .modal-content {
+                margin: 10% auto;
+                width: 95%;
+                padding: 20px 15px;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+            }
+
+            .modal-buttons .btn {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.6em;
+            }
+
+            .table {
+                min-width: 600px;
+            }
+
+            .table th,
+            .table td {
+                padding: 6px 4px;
+                font-size: 12px;
+            }
+
+            .username-cell {
+                min-width: 100px;
+            }
+
+            .role-select, .tier-select {
+                width: 75px;
+                font-size: 10px;
+            }
+
+            .action-btn {
+                font-size: 10px;
+                padding: 6px 8px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .tier-item .tier-details {
+                font-size: 0.8em;
             }
         }
     </style>
@@ -614,7 +760,7 @@
             <!-- Pending Requests Section -->
             <div class="section">
                 <div class="section-title">
-                    Pending Registration Requests
+                    <span>Pending Registration Requests</span>
                     <button class="btn btn-primary refresh-btn" onclick="loadRequests()">Refresh</button>
                 </div>
                 
@@ -629,25 +775,26 @@
                 </div>
 
                 <div id="requestsContent" class="hidden">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Requested</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="requestsTableBody">
-                        </tbody>
-                    </table>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Requested</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requestsTableBody">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
             <!-- Users Management Section -->
             <div class="section">
                 <div class="section-title">
-                    User Management
+                    <span>User Management</span>
                     <button class="btn btn-primary refresh-btn" onclick="loadUsers()">Refresh</button>
                 </div>
                 
@@ -662,20 +809,21 @@
                 </div>
 
                 <div id="usersContent" class="hidden">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Role</th>
-                                <th>Tier</th>
-                                <th>Status</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody">
-                        </tbody>
-                    </table>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Tier</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -880,7 +1028,6 @@
                 row.innerHTML = `
                     <td class="username-cell">${escapeHtml(request.username)}</td>
                     <td>${request.createdFormatted || new Date(request.created).toLocaleString()}</td>
-                    <td><span class="status-badge status-pending">PENDING</span></td>
                     <td>
                         <div class="action-buttons">
                             <button class="action-btn btn-success" onclick="showApproveModal('${request.id}', '${escapeHtml(request.username)}')">Approve</button>
@@ -901,24 +1048,6 @@
                 const createdDate = new Date(user.created).toLocaleDateString();
                 const userTier = user.tier || 0;
                 
-                // Determine status
-                let statusInfo = '';
-                if (user.banned) {
-                    statusInfo = `<span class="status-badge status-banned">Banned</span>`;
-                    if (user.banReason) {
-                        statusInfo += `<br><span class="ban-reason">${escapeHtml(user.banReason)}</span>`;
-                    }
-                } else if (user.muted && user.muteEnd > Date.now()) {
-                    statusInfo = `<span class="status-badge status-muted">Muted</span>`;
-                    if (user.muteReason) {
-                        statusInfo += `<br><span class="mute-info">${escapeHtml(user.muteReason)}</span>`;
-                    }
-                    const muteEnd = new Date(user.muteEnd);
-                    statusInfo += `<br><span class="mute-info">Until: ${muteEnd.toLocaleString()}</span>`;
-                } else {
-                    statusInfo = `<span class="status-badge status-active">Active</span>`;
-                }
-                
                 row.innerHTML = `
                     <td class="username-cell">${escapeHtml(user.username)}</td>
                     <td>
@@ -927,7 +1056,6 @@
                     <td>
                         <span class="tier-badge tier-${userTier}">Tier ${userTier}</span>
                     </td>
-                    <td>${statusInfo}</td>
                     <td>${createdDate}</td>
                     <td>
                         <div class="action-buttons">

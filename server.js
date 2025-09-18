@@ -29,6 +29,12 @@ const VOICE_MESSAGE_COOLDOWN = 2 * 1000; // 2 seconds for voice messages
 const MAX_DOCUMENT_SIZE = 50 * 1024; // 50KB
 const MAX_VOICE_SIZE = 2 * 1024 * 1024; // 2MB
 
+// Username and password constraints
+const MIN_USERNAME_LENGTH = 3;
+const MAX_USERNAME_LENGTH = 20;
+const MIN_PASSWORD_LENGTH = 3;
+const MAX_PASSWORD_LENGTH = 40;
+
 // Updated tier limits - NO MORE TIER 1 FREE
 const TIER_LIMITS = {
   1: { // 100€/lifetime
@@ -79,6 +85,12 @@ const activeUsers = new Map();
 const messageLimits = new Map();
 const friendRequestCooldowns = new Map();
 
+// IP-based registration tracking (RAM only, resets daily like upload tracking)
+let ipRegistrationTracking = {
+  lastReset: getCurrentDateString(),
+  ips: new Map() // IP -> last registration timestamp
+};
+
 // Message cache to prevent ghost messages
 const messageCache = new Map(); // chatId -> messages array
 
@@ -91,6 +103,28 @@ let uploadTracking = {
 // Helper function to get current date as string (YYYY-MM-DD)
 function getCurrentDateString() {
   return new Date().toISOString().split('T')[0];
+}
+
+// Helper function to check if IP can register today
+async function canRegisterFromIP(ip) {
+  // Check for daily reset first
+  await checkAndResetDailyLimits();
+  
+  const now = Date.now();
+  const lastRegistration = ipRegistrationTracking.ips.get(ip);
+  
+  if (!lastRegistration) {
+    return true; // First time registration from this IP
+  }
+  
+  // Check if last registration was more than 24 hours ago
+  const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
+  return lastRegistration < twentyFourHoursAgo;
+}
+
+// Helper function to record IP registration
+function recordIPRegistration(ip) {
+  ipRegistrationTracking.ips.set(ip, Date.now());
 }
 
 // Load upload tracking from file
@@ -124,6 +158,7 @@ async function saveUploadTracking() {
 async function checkAndResetDailyLimits() {
   const currentDate = getCurrentDateString();
   
+  // Reset upload limits
   if (uploadTracking.lastReset !== currentDate) {
     console.log(`Resetting daily upload limits (last reset: ${uploadTracking.lastReset}, current: ${currentDate})`);
     
@@ -138,6 +173,13 @@ async function checkAndResetDailyLimits() {
     
     uploadTracking.lastReset = currentDate;
     await saveUploadTracking();
+  }
+  
+  // Reset IP registration limits
+  if (ipRegistrationTracking.lastReset !== currentDate) {
+    console.log(`Resetting daily IP registration limits (last reset: ${ipRegistrationTracking.lastReset}, current: ${currentDate})`);
+    ipRegistrationTracking.ips.clear();
+    ipRegistrationTracking.lastReset = currentDate;
   }
 }
 
@@ -2072,13 +2114,29 @@ io.on('connection', (socket) => {
 
 // API Routes
 
-// Updated registration route - saves to requests.json instead of users.json
+// Updated registration route - saves to requests.json instead of users.json with username/password validation and IP rate limiting
 app.post('/api/register', async (req, res) => {
   try {
     const { username, password } = req.body;
+    const clientIP = req.ip || req.connection.remoteAddress;
     
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' });
+    }
+    
+    // Username length validation
+    if (username.length < MIN_USERNAME_LENGTH || username.length > MAX_USERNAME_LENGTH) {
+      return res.status(400).json({ error: `Username must be between ${MIN_USERNAME_LENGTH} and ${MAX_USERNAME_LENGTH} characters` });
+    }
+    
+    // Password length validation
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters` });
+    }
+    
+    // IP rate limiting check (1 registration per day per IP)
+    if (!(await canRegisterFromIP(clientIP))) {
+      return res.status(429).json({ error: 'Only one registration per IP address per day is allowed' });
     }
     
     // Check if username already exists in users.json
@@ -2104,6 +2162,9 @@ app.post('/api/register', async (req, res) => {
     
     requests.push(request);
     await saveJSON('private/requests/requests.json', requests);
+    
+    // Record IP registration (successful registration)
+    recordIPRegistration(clientIP);
     
     res.json({ 
       message: 'Registration request submitted successfully. You will be able to login once your account is approved.',
@@ -2808,6 +2869,9 @@ async function start() {
     console.log(`Voice message cooldown: 2 seconds`);
     console.log(`Max document size: 50KB`);
     console.log(`Max voice message size: 2MB`);
+    console.log(`Username length: ${MIN_USERNAME_LENGTH}-${MAX_USERNAME_LENGTH} characters`);
+    console.log(`Password length: ${MIN_PASSWORD_LENGTH}-${MAX_PASSWORD_LENGTH} characters`);
+    console.log(`IP registration limit: 1 registration per IP per day`);
     console.log(`NEW TIER SYSTEM - NO FREE TIER:`);
     console.log(`  Tier 1 (€100): ${TIER_LIMITS[1].pictures} pics, ${TIER_LIMITS[1].videos} videos, ${TIER_LIMITS[1].documents} docs, ${TIER_LIMITS[1].voice} voice/day`);
     console.log(`  Tier 2 (€150): ${TIER_LIMITS[2].pictures} pics, ${TIER_LIMITS[2].videos} videos, ${TIER_LIMITS[2].documents} docs, ${TIER_LIMITS[2].voice} voice/day`);
